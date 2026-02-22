@@ -704,7 +704,7 @@ def run_all():
             results = _run_experiment_group(runner, suite.name, group)
             print(f'    Group results saved in: {runner.resultFilepath}')  
             suite_results.append(results)
-        
+        print(suite_results)
         # plot aggregate results for suite
         _plot_experiment_suite(runner, suite_results)
 

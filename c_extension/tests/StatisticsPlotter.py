@@ -42,84 +42,14 @@ class StatisticsPlotter:
     
 
     def plot_experiment_suite(self, csv_results: list) -> None:
+        ''' MAIN entrypoint '''
+        
         df = self.load_all_csvs(csv_results)    
-
+        
         iv = df['independent_variable'][0]
-        print(iv)
-
-        self.plot_timeNaccuracy_vs_iv(df, iv)
-        self.run_reduce_plot_suite(df, iv)
-
-    def run_reduce_plot_suite(self, df: pd.DataFrame, independent_variable: str) -> None:
-        ''' check that IV is actually reduce, and then create relevant plots '''
-
-        if independent_variable != self.REDUCE_PARAM_NAME:
-            return
+        path = self.plot_time_coverage_by_reduce(df, iv)
         
-        self.plot_reduction_heatmap()
-    
-    def plot_timeNaccuracy_vs_iv(self, df: pd.DataFrame, indep_variable: str) -> str:
-        """generate single plot with all three N vs time metrics"""
-    
-        # x values
-        try:
-            iv = df[indep_variable]
-        except Exception as e:
-            return f"error trying to get x-axis:  {e}"
-        if pd.api.types.is_numeric_dtype(iv):
-            x_pos = iv.values
-            xtick_labels = iv.values
-        else:
-            x_pos = range(len(iv))
-            xtick_labels = iv.values
-
-        # y values
-        min_mean_time = df['min_time_mean']
-        max_mean_time = df['max_time_mean']
-        sum_mean_time = df['sum_time_mean']
-        
-        # plots
-        fig, ax = plt.subplots(2, 1, figsize=(12, 15))
-        
-        # TIME
-        ax1 = ax[0]
-        ax1.errorbar(iv, min_mean_time, yerr=df['min_time_std'], marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='purple', label='MIN')
-        ax1.errorbar(iv, max_mean_time, yerr=df['max_time_std'], marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='orange', label='MAX')
-        ax1.errorbar(iv, sum_mean_time, yerr=df['sum_time_std'], marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='green', label='SUM')
-
-        # titles and labels
-        ax1.set_title(f"Query Performance vs {indep_variable} (n={int(df['dataset_size'].iloc[-1])})", fontsize=14, fontweight='bold')
-        ax1.set_xlabel(f'iv: {indep_variable}', fontsize=12)
-        ax1.set_ylabel('Time (ms)', fontsize=12)
-        ax1.legend(fontsize=11)
-        ax1.grid(True, alpha=0.3)
-        
-        step = max(1, len(x_pos) // 10)
-        ax1.set_xticks(x_pos[::step])
-        ax1.set_xticklabels(xtick_labels[::step], rotation=45, ha='right')
-
-        # ACCURACY
-        y = df['result_coverage_mean']
-        ax2 = ax[1]
-        ax2.errorbar(iv, y, marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='purple', label='MIN')
-        ax2.errorbar(iv, y, marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='orange', label='MAX')
-        ax2.errorbar(iv, y, marker='o', capsize=5, capthick=1, linewidth=2, markersize=5, color='green', label='SUM')
-
-        # titles and labels
-        ax2.set_title(f"Coverage vs {indep_variable} (n={int(df['dataset_size'].iloc[-1])})", fontsize=14, fontweight='bold')
-        ax2.set_xlabel(f'iv: {indep_variable}', fontsize=12)
-        ax2.set_ylabel('result_coverage_mean (ratio ~1)', fontsize=12)
-        ax2.legend(fontsize=11)
-        ax2.grid(True, alpha=0.3)
-        
-        ax2.set_xticks(x_pos[::step])
-        ax2.set_xticklabels(xtick_labels[::step], rotation=45, ha='right')
-
-        plt.tight_layout()
-        outfile = f'time_accuracy_sd{self.master_seed}'
-        outpath = f"{self.resultFilepath}/{outfile}"
-        plt.savefig(outpath)
-        return outpath
+        print("Results saved in: ", path)
     
     def plot_reduction_heatmap(self, df: pd.DataFrame, indep_variable: str) -> str:
         """generate heatmap for reduction parameter tuning"""
@@ -152,3 +82,47 @@ class StatisticsPlotter:
         return outpath
     
     # def plot_pareto_front(self, df: pd.DataFrame)
+
+
+    def plot_time_coverage_by_reduce(self, df: pd.DataFrame, indep_variable: str) -> str:
+        
+        ''' plot time vs IV and coverage vs IV for'''
+        # Sort dataframe by dataset size
+        df_sorted = df.sort_values(indep_variable)
+
+        # Group by reduction parameters
+        dfg = df_sorted.groupby(self.REDUCE_PARAM_NAME)
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+
+        for p, group in dfg:
+            # Make sure each group is sorted by dataset_size
+            group = group.sort_values(indep_variable)
+            x = group[indep_variable]
+            y_time = group['sum_time_mean']
+            y_time_err = group['sum_time_std']
+            y_coverage = group['result_coverage_mean']
+
+            # Plot time with error bars
+            ax1.errorbar(x, y_time, yerr=y_time_err, fmt='o-', capsize=5, label=str(p))
+            # Plot coverage
+            ax2.errorbar(x, y_coverage, fmt='o-', capsize=5, label=str(p))
+
+        # TIME axis labels
+        ax1.set_ylabel('Time (ms)')
+        ax1.set_title('Time vs Dataset Size by Reduction Parameters')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(title='Reduce Params')
+
+        # COVERAGE axis labels
+        ax2.set_ylabel('Coverage')
+        ax2.set_xlabel('Dataset Size')
+        ax2.set_title('Coverage vs Dataset Size by Reduction Parameters')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(title='Reduce Params')
+
+        plt.tight_layout()
+        outfile = f'time_accuracy_sd{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        return outpath
