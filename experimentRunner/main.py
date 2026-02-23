@@ -282,35 +282,44 @@ class ExperimentRunner:
 
         return csv_path
     
-    def clean_tables(self, find_trigger="t_%"):
+    def clean_tables(self, find_trigger="t_%", batch_size=200):
         '''drop all tables with wildcard match {find_trigger}'''
         
         print(f"\nCleaning/ Dropping all Tables starting with '{find_trigger}'")
         with self.__connect_db() as conn:
             with conn.cursor() as cur:
                 try:
-                    cur.execute(f"""SELECT tablename 
-                                FROM pg_tables 
-                                WHERE schemaname = 'public' AND tablename LIKE '{find_trigger}';""")
-                    tables = cur.fetchall()
+                    cur.execute(f"""
+                        SELECT tablename 
+                        FROM pg_tables 
+                        WHERE schemaname = 'public' 
+                            AND tablename LIKE '{find_trigger}'
+                        ORDER BY tablename;
+                    """)
+                    tables = [row[0] for row in cur.fetchall()]
 
                     if not tables:
                         print(f"  No tables found matching: {find_trigger}\n")
                         return
 
-                    #    if too many table drops at once, add this basic logic and run script with no expriments
-                    #    ERROR: out of shared memory ;  or we can:  HINT: You might need to increase max_locks_per_transaction
-                    i = 0
-                    for table in tables:
-                        i +=1
-                        # if(i<1000):
-                        cur.execute(f"DROP TABLE {table[0]};")
-                        # print(f"  Dropping Table {table[0]}")
+                    dropped = 0
+                    for i in range(0, len(tables), batch_size):
+                        batch = tables[i: i+batch_size]
                         
-                    print(f' Dropped {i} tables')
+                        # with self.__connect_db() as tempConn:
+                        for table in batch:
+                            try:
+                                cur.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE;')
+                                dropped+=1
+                                # print(f"  Dropping Table {table[0]}")
+                            except Exception as e:
+                                print(f"    Failed to drop '{table}': {e}")
+                                raise
+                        conn.commit()
+                        # print(f"  Committed batch {dropped}/{len(tables)} dropped so far")
                 except Exception as e:
                     print(f"    Error cleaning tables: {e}")
-                    conn.rollback()
+        print(f"\nDropped {dropped} tables\n")
 
     def set_file_path(self, suite_name: str, group_name: str, experiment_name:str) -> None:
         """creates experiment folder path based on group and experiment name.
@@ -704,7 +713,9 @@ def run_all():
             results = _run_experiment_group(runner, suite.name, group)
             print(f'    Group results saved in: {runner.resultFilepath}')  
             suite_results.append(results)
+        
         print(suite_results)
+
         # plot aggregate results for suite
         _plot_experiment_suite(runner, suite_results)
 
@@ -751,16 +762,7 @@ def _run_experiment_group(runner: ExperimentRunner, suite_name: str, group: Expe
     df = pd.DataFrame(runner.results)
     df.to_csv(group_csv_path, index=False)
     
-    # print(group_csv_path)
-    
     return group_csv_path
-
-# def _plot_experiment_group(runner: ExperimentRunner, group_results: list, independent_variable: str) -> None:
-#     if group_results is None:
-#         raise ValueError('No list of csv results for group')
-
-#     plotter = StatisticsPlotter(runner.resultFilepath, runner.master_seed)
-#     plotter.plot_experiment_group(group_results, independent_variable)
 
 def _plot_experiment_suite(runner: ExperimentRunner, csv_paths: list) -> None:
     if csv_paths is None:

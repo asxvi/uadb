@@ -119,4 +119,4 @@ def plot_ni_gap_sweep_red_sweep(max_ni: int, n: int, suite_name: str = None):
 ## <<<<====>>>> ##
 ## <<<<====>>>> ##
 # plot_all_ni_sweep(10, 10_000, 'ni_sweeping10k')
-plot_ni_gap_sweep_red_sweep(10, 10_000, 'ni_gap_10k')
+# plot_ni_gap_sweep_red_sweep(10, 10_000, 'ni_gap_10k')

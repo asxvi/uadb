@@ -4,8 +4,8 @@
 
 # Test suite files to ignore
 database.ini
-tests/data/
-c_extension/tests/data/
+experimentRunner/data/
+c_extension/experimentRunner/data/
 
 # https://github.com/github/gitignore/blob/main/C.gitignore
 
