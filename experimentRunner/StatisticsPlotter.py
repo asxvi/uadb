@@ -31,7 +31,10 @@ class StatisticsPlotter:
             dfs.append(df)
         
         combined = pd.concat(dfs, ignore_index=True)
-                
+        
+        # add in tuple representation vs string for convenience
+        combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
+        combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
         return combined
 
     def plot_experiment_group(self, group_csv_results: list, independent_variable: str) -> None:
@@ -126,3 +129,62 @@ class StatisticsPlotter:
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         return outpath
+    
+    # def plot_2_row_each_ni(self, df) -> str:
+
+    def plot_3_row_red_vs_TimeNCover(self, df) -> str:
+        ''' calculates time/cover/distance vs redution params for each ni'''
+
+        reduce_params = sorted(df['reduce_triggerSz_sizeLim_tuple'].unique())
+
+        x_labels = [str(r) for r in reduce_params]
+        n = len(df['num_intervals'].unique())
+
+        # 0: Time vs red params for each ni
+        # 1: Cover vs red params for each ni
+        # 2: Distance = sqrt(time^2 + cover^2)
+        fig, axes=  plt.subplots(3, n, figsize=(6*n,12))
+        for i, ni in enumerate(sorted(df['num_intervals'].unique())):
+            # plot for each ni
+            df_ni = df[df['num_intervals'] == ni].copy()
+
+            # PLot 1: time
+            ax = axes[0, i]
+            y = df_ni['sum_time_mean']
+            ax.plot(x_labels, y, marker='o')
+            ax.set_title(f'ni={ni}')
+            ax.set_xlabel('red')
+            ax.grid(True)
+
+            # Plot 2: coverage
+            ax = axes[1, i]
+            y = df_ni['result_coverage_mean']
+            ax.plot(x_labels, y, marker='o')
+            ax.set_title(f'ni={ni}')
+            ax.set_xlabel('red')
+            ax.grid(True)
+
+            # Plot 3: distance of both time and coverage
+            # normalize time and coverage to equal weight (x-min)/(max-min)
+            df_ni['time_norm'] = self.safe_normalize(df_ni['sum_time_mean'])
+            df_ni['cov_norm'] = self.safe_normalize(df_ni['result_coverage_mean'])
+            scores = (df_ni['time_norm']**2 + df_ni['cov_norm']**2)**0.5
+            
+            ax = axes[2, i]
+            ax.plot(x_labels, scores, marker='o')
+            ax.set_title(f'ni={ni}')
+            ax.set_xlabel('red')
+            ax.grid(True)
+            
+        axes[0][0].set_ylabel('Time (ms)')
+        axes[1][0].set_ylabel('Coverage (smaller=better)')
+        axes[2][0].set_ylabel('Distance (smaller=bettwe)')
+        
+        outfile = f'distance_vs_NI_and_red{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        return outpath
+
+    def safe_normalize(self, series):
+        r = series.max() - series.min()
+        return (series - series.min()) / r if r > 0 else pd.Series(0.0, index=series.index)

@@ -350,8 +350,13 @@ class ExperimentRunner:
         if np.random.random() < experiment.uncertain_ratio * 0.5:  
             return RangeType(0, 0, True)
 
+        
         lb = np.random.randint(*experiment.interval_size_range)
         ub = np.random.randint(lb+1, experiment.interval_size_range[1]+1)
+
+        # protect against mistakes or future changes
+        if lb > ub:
+            lb, ub = ub, lb
         return RangeType(lb, ub)
     
     def __generate_set(self, experiment:ExperimentSettings) -> RangeSetType:
@@ -388,9 +393,14 @@ class ExperimentRunner:
                 interval_width = np.random.randint(*experiment.interval_width_range)
             else:
                 raise ValueError("Either interval_width or interval_width_range must be specified")
-            interval_end = start + interval_width
-
-            rset.append(RangeType(start, interval_end, False))
+            interval_end = start + max(1, interval_width)
+            
+            # should never trigger, incase does
+            if interval_end <= start:
+                print(f"BAD RANGE: start={start}, interval_end={interval_end}, width={interval_width}, i={i}")
+                rset.append(RangeType([], interval_end, False))  
+            else:     
+                rset.append(RangeType(start, interval_end, False))
 
             # find next gap if not last
             if i < num_intervals -1:
@@ -443,8 +453,9 @@ class ExperimentRunner:
         sql = f"""EXPLAIN (analyze, format json)
             SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
             FROM {table};"""
-        cur.execute(sql)
         
+        cur.execute(sql)
+    
         print(f"DEBUG SQL: {table}") 
         results = cur.fetchone()[0]
         plan_root = results[0]
