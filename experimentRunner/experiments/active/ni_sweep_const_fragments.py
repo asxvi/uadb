@@ -29,19 +29,24 @@ template = ExperimentSettings(
 
 def num_intervals_sweep_const_size(max_ni: int = 4, n: int = 10_000, trigger_size: int = 10, reduce_to_size: int = 5):    
     group = ExperimentGroup(f'ni{max_ni}n_{n}_red{trigger_size}_{reduce_to_size}_sweep', 'num_intervals', None)
+    
+    interval_max_size_range = 100000
+    gap_size_min = 5000
+    gap_size_max = 10000
+
     for ni in range(1, max_ni+1, 1):
         experiment = replace(
             template,
             dataset_size             = n,
-            num_trials               = 5,
+            num_trials               = 1,
             uncertain_ratio          = 0.0,
             independent_variable     = 'num_intervals',
-            interval_size_range      = (1, 10_000),
-            start_interval_range     = (1, 2),
+            interval_size_range      = (1, interval_max_size_range),
+            start_interval_range     = (1, 3),
             # gap_size                 = int((50000-100)/ni),
-            gap_size_range           = (int((10000-1000)/ni), int((10000-500)/ni)),
-            interval_width_range     = (500, 1000),
-            # interval_width           = 100,
+            gap_size_range           = (int((interval_max_size_range - gap_size_max)/ni), int((interval_max_size_range - gap_size_min)/ni)),
+            # gap_size_range           = (gap_size_min, gap_size_max),
+            interval_width_range     = (1, 50),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
         )
@@ -62,15 +67,16 @@ def plot_all_ni_n_sweep(max_ni, n_list, suite_name = None):
     suite = experiments[suite_name]
 
     for n in n_list:
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 15, 10))
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 10, 5))
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 4, 2))
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 9, 3))
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 5, 2))
-        # suite.add(num_intervals_sweep_const_size(max_ni, n, 1, 1)) 
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 15, 10))
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 10, 5))
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 4, 2))
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 9, 3))
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 5, 2))
+        suite.add(num_intervals_sweep_const_size(max_ni, n, 1, 1)) 
         suite.add(num_intervals_sweep_const_size(max_ni, n, 3, 1))
 
 
 ## ============================== ##
 
-plot_all_ni_n_sweep(10, [10000, 20000, 40000, 60000], 'ni_n_sweep')
+# plot_all_ni_n_sweep(10, [2000, 4000, 8000, 12000], 'ni_n_sweep')
+plot_all_ni_n_sweep(20, [100, 500, 1000], 'ni_n_sweep')

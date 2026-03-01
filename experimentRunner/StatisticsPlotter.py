@@ -99,7 +99,17 @@ class StatisticsPlotter:
         dfg = df_sorted.groupby(self.REDUCE_PARAM_NAME)
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-
+       
+        param_str = (
+            f' | iv={sorted(df["independent_variable"].unique())} | '
+            f'n={sorted(df["dataset_size"].unique())} | '
+            f'gaps={sorted(df["gap_size_range"].unique())} | '
+            f'widths={sorted(df["interval_width_range"].unique())} | '
+            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
+            f'dataPath={self.resultFilepath} | '
+            f'seed={self.master_seed} | '
+        )
+        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
         for p, group in dfg:
             # Make sure each group is sorted by dataset_size
             group = group.sort_values(indep_variable)

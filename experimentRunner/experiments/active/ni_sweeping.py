@@ -36,10 +36,10 @@ def num_intervals_sweep(max_ni: int = 4, n: int = 10_000, trigger_size: int = 10
             num_trials               = 5,
             uncertain_ratio          = 0.0,
             independent_variable     = 'num_intervals',
-            interval_size_range      = (1, 50_000),
-            start_interval_range     = (1, 2),
-            gap_size_range           = (1000, 5000),
-            interval_width_range     = (2, 15),
+            interval_size_range      = (1, 100_000),
+            start_interval_range     = (1, 100),
+            gap_size_range           = (10000, 15000),
+            interval_width_range     = (100, 600),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
         )
@@ -57,20 +57,24 @@ def plot_all_ni_sweep(max_ni: int, n: int, suite_name: str = None):
         experiments[suite_name] = ExperimentSuite(suite_name)
     
     suite = experiments[suite_name]
-    # suite.add(num_intervals_sweep(max_ni, n, 15, 10))
-    # suite.add(num_intervals_sweep(max_ni, n, 10, 5))
-    # suite.add(num_intervals_sweep(max_ni, n, 4, 2))
-    suite.add(num_intervals_sweep(max_ni, n, 9, 3))
-    suite.add(num_intervals_sweep(max_ni, n, 5, 2))
-    suite.add(num_intervals_sweep(max_ni, n, 3, 1))
-    suite.add(num_intervals_sweep(max_ni, n, 1, 1))
 
     # for i in range(1, 11, 1):
     #     suite.add(num_intervals_sweep(max_ni, n, i+1, i))
+    
+    # suite.add(num_intervals_sweep(max_ni, n, 500, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 500, 5))
+    # suite.add(num_intervals_sweep(max_ni, n, 300, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 300, 5))
+    # suite.add(num_intervals_sweep(max_ni, n, 150, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 150, 5))
+    # suite.add(num_intervals_sweep(max_ni, n, 15, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 10, 5))
+    # suite.add(num_intervals_sweep(max_ni, n, 3, 2))
+    suite.add(num_intervals_sweep(max_ni, n, 1, 1))
 
 
 ## ============================== ##
 
 # plot_all_ni_n_sweep(10, [10000, 20000, 40000, 60000], 'ni_n_sweep')
 
-plot_all_ni_sweep(10, 10_000, 'ni_sweeping10k')
+plot_all_ni_sweep(15, 2_000, 'ni_sweeping10k')
