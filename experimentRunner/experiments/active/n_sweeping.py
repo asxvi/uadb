@@ -29,23 +29,24 @@ template = ExperimentSettings(
 def static_n_sweep(max_n: int = 100_000, step: int = 10_000, trigger_size: int = 10, reduce_to_size: int = 5):
     group = ExperimentGroup(f'n{max_n}_red{trigger_size}_{reduce_to_size}_sweep', 'dataset_size', None)
 
-    for n in range(step, max_n+step, step):
+    for n in range(step, max_n + step, step):
         experiment = replace(
             template,
             dataset_size             = n,
-            num_trials               = 5,
+            num_trials               = 1,
             uncertain_ratio          = 0.0,
             independent_variable     = 'dataset_size',
-            interval_size_range      = (1, 4_000),
-            start_interval_range     = (1, 2),
-            gap_size_range           = (250, 500),
-            interval_width_range     = (2, 15),
-            num_intervals            = 4,
+            interval_size_range      = (1, 100_000),
+            start_interval_range     = (1, 5),
+            gap_size_range           = (2000, 2001),
+            interval_width_range     = (5, 6),
+            num_intervals            = 5,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
         )
+
         experiment.name = format_name(experiment)
         group.experiments[experiment.name] = experiment
-    
+
     return group
 
 def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
@@ -55,13 +56,17 @@ def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
     
     suite = experiments[suite_name]
     
+    
+    # suite.add(static_n_sweep(n, step, 500, 10))
+    # suite.add(static_n_sweep(n, step, 150, 10))
+    # suite.add(static_n_sweep(n, step, 50, 10))
     suite.add(static_n_sweep(n, step, 15, 10))
-    suite.add(static_n_sweep(n, step, 10, 5))
-    suite.add(static_n_sweep(n, step, 4, 2))
-    suite.add(static_n_sweep(n, step, 9, 3))
-    suite.add(static_n_sweep(n, step, 5, 2))
-    suite.add(static_n_sweep(n, step, 3, 1))
-    suite.add(static_n_sweep(n, step, 1, 1))
+    # suite.add(static_n_sweep(n, step, 10, 5))
+    # suite.add(static_n_sweep(n, step, 4, 2))
+    # suite.add(static_n_sweep(n, step, 9, 3))
+    # suite.add(static_n_sweep(n, step, 5, 2))
+    # suite.add(static_n_sweep(n, step, 3, 1))
+    # suite.add(static_n_sweep(n, step, 1, 1))
 
-# plot_all_n_sweep(100_000, 10, 'n_sweeping100k')
-plot_all_n_sweep(40_000, 2_000, 'n_sweeping40k')
+# plot_all_n_sweep(100_000, 10000, 'n_sweeping100k')
+plot_all_n_sweep(4000, 100, 'n_sweeping4k')

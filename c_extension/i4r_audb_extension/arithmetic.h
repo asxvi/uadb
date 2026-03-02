@@ -21,6 +21,7 @@ Int4RangeSet range_set_subtract_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet range_set_multiply_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet range_set_divide_internal(Int4RangeSet a, Int4RangeSet b);
 
+Int4RangeSet agg_range_set_add_internal(Int4RangeSet a, Int4RangeSet b);
 
 /*
   Helper function to multiply float interval set * float interval set. 

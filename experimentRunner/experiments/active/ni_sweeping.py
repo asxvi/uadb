@@ -27,19 +27,21 @@ template = ExperimentSettings(
 )
 
 def num_intervals_sweep(max_ni: int = 4, n: int = 10_000, trigger_size: int = 10, reduce_to_size: int = 5):
-    
     group = ExperimentGroup(f'ni{max_ni}_red{trigger_size}_{reduce_to_size}_sweep', 'num_intervals', None)
-    for ni in range(1, max_ni+1, 1):
+    
+    # for ni in range(1, max_ni+1, 1):
+    if 1 == 1:
+        ni = 5
         experiment = replace(
             template,
             dataset_size             = n,
-            num_trials               = 5,
+            num_trials               = 1,
             uncertain_ratio          = 0.0,
             independent_variable     = 'num_intervals',
             interval_size_range      = (1, 100_000),
-            start_interval_range     = (1, 100),
-            gap_size_range           = (10000, 15000),
-            interval_width_range     = (100, 600),
+            start_interval_range     = (1, 5),
+            gap_size_range           = (2000, 2001),
+            interval_width_range     = (5, 6),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
         )
@@ -59,22 +61,46 @@ def plot_all_ni_sweep(max_ni: int, n: int, suite_name: str = None):
     suite = experiments[suite_name]
 
     # for i in range(1, 11, 1):
-    #     suite.add(num_intervals_sweep(max_ni, n, i+1, i))
-    
-    # suite.add(num_intervals_sweep(max_ni, n, 500, 10))
-    # suite.add(num_intervals_sweep(max_ni, n, 500, 5))
-    # suite.add(num_intervals_sweep(max_ni, n, 300, 10))
-    # suite.add(num_intervals_sweep(max_ni, n, 300, 5))
-    # suite.add(num_intervals_sweep(max_ni, n, 150, 10))
-    # suite.add(num_intervals_sweep(max_ni, n, 150, 5))
-    # suite.add(num_intervals_sweep(max_ni, n, 15, 10))
-    # suite.add(num_intervals_sweep(max_ni, n, 10, 5))
-    # suite.add(num_intervals_sweep(max_ni, n, 3, 2))
-    suite.add(num_intervals_sweep(max_ni, n, 1, 1))
+    # for trigger in [2, 5, 10, 20, 50, 100, 250, 500, 750, 1000, 2000]:
+    #     suite.add(num_intervals_sweep(max_ni, n, trigger, 5))
 
+        # suite.add(num_intervals_sweep(max_ni, n, 100, i))
+    suite.add(num_intervals_sweep(max_ni, n, 100, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 10))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 40))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 60))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 80))
+    # suite.add(num_intervals_sweep(max_ni, n, 100, 90))
 
 ## ============================== ##
 
-# plot_all_ni_n_sweep(10, [10000, 20000, 40000, 60000], 'ni_n_sweep')
+plot_all_ni_sweep(10, 50, 'ni_sweepingn_50') 
+plot_all_ni_sweep(10, 100, 'ni_sweepingn_100') 
+plot_all_ni_sweep(10, 250, 'ni_sweepingn_250') 
+plot_all_ni_sweep(10, 500, 'ni_sweepingn_500')
 
-plot_all_ni_sweep(15, 2_000, 'ni_sweeping10k')
+
+
+'''
+parameter sweep
+ni 
+red trigger
+red newSz
+
+maybe n to see when the tbale starts converging 
+
+
+
+
+
+-4 ,1000,1000,22,4725,79950,50)
+-3 ,1000,1000,72,4925,158620,100) 
+-2 ,1000,1000,222,4985,682870,250)
+-1 ,1000,1000,392,5000,1512845,500) ("{""[1226,4013727)""}",
+
+'''
+
+
+
+

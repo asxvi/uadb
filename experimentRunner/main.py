@@ -74,6 +74,7 @@ class ExperimentSettings:
     independent_variable: str = None            # flag for what var we test. Used internally
     start_interval_range: tuple = (interval_size_range[0], interval_size_range[1])   
     reduce_triggerSz_sizeLim: tuple = (10,5)    # test this. need to figure out how to encode different techniques.
+    domain_max: int = None
     
     # use these value if not None, otherwise use tuple if not None, both none = error
     interval_width: int = None
@@ -413,9 +414,9 @@ class ExperimentRunner:
                 
                 start = interval_end + gap
 
-                # next next start exceeds bounds, we can't add more intervals
-                if start >= experiment.interval_size_range[1]:
-                    break
+            # next next start exceeds bounds, we can't add more intervals
+            if experiment.domain_max is not None and start >= experiment.domain_max:
+                break
 
         return RangeSetType(rset, cu=False)
 
@@ -728,7 +729,7 @@ def run_all():
         print(suite_results)
 
         # plot aggregate results for suite
-        _plot_experiment_suite(runner, suite_results)
+        # _plot_experiment_suite(runner, suite_results)
 
     ### Clean after
     if args.clean_after:

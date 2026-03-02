@@ -59,6 +59,9 @@ typedef struct {
     long totalIntervalCount;        //sum of counts across all agg
     long combineCalls;              //number of times merged new input
 
+    long minEffectiveIntervalCount; // smallest number of intervals after reduction
+    long convergedToTotSize;             //the min size of the fully converged result
+
 } SumAggStateTest;
 
 typedef struct {
@@ -97,6 +100,9 @@ Int4RangeSet sort(Int4RangeSet vals);
 Int4RangeSet normalize(Int4RangeSet vals);
 Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep);
 Int4RangeSet filterOutNulls(Int4RangeSet vals);
-// void reallocRangeSet(Int4RangeSet* a);
 Int4RangeSet interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult);
+
+
+Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep);
+
 #endif

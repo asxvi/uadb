@@ -303,7 +303,6 @@ INSERT INTO tX_superWide3 (val, mult) VALUES
     (array[int4range(1,3), int4range(10000,100000), int4range(1000000,100000000)], int4range(1,2)),
     (array[int4range(1,3), int4range(10000,100000), int4range(1000000,100000000)], int4range(1,2));
 
-
 DROP TABLE IF EXISTS tX_superWideN;
 CREATE TEMP TABLE tX_superWideN (
     id int GENERATED ALWAYS AS IDENTITY,
@@ -311,6 +310,31 @@ CREATE TEMP TABLE tX_superWideN (
     mult int4range
 );
 INSERT INTO tX_superWideN (val, mult) VALUES
+    (array[int4range(1,3), int4range(10,100), int4range(1000,10000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,4)),
+    (array[int4range(1,3), int4range(10,100), int4range(1000,10000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,4)),
+    (array[int4range(1,3), int4range(10,100), int4range(1000,10000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,2)),
+    (array[int4range(1,3), int4range(10,100), int4range(1000,10000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,2));
+
+DROP TABLE IF EXISTS tX_superWide;
+CREATE TEMP TABLE tX_superWide (
+    id int GENERATED ALWAYS AS IDENTITY,
+    val int4range[],
+    mult int4range
+);
+INSERT INTO tX_superWide (val, mult) VALUES
+    (array[int4range(1,3), int4range(1000,10000), int4range(50000,100000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,4)),
+    (array[int4range(1,3), int4range(1000,10000), int4range(50000,100000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,4)),
+    (array[int4range(1,3), int4range(1000,10000), int4range(50000,100000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,2)),
+    (array[int4range(1,3), int4range(1000,10000), int4range(50000,100000), int4range(100000,1000000), int4range(10000000,100000000)], int4range(1,2));
+
+
+DROP TABLE IF EXISTS tX_superWide123;
+CREATE TEMP TABLE tX_superWide123 (
+    id int GENERATED ALWAYS AS IDENTITY,
+    val int4range[],
+    mult int4range
+);
+INSERT INTO tX_superWide123 (val, mult) VALUES
     (array[int4range(1,3)], int4range(1,4)),
     (array[int4range(1,3), int4range(10000,100000)], int4range(1,2)),
     (array[int4range(1,3), int4range(10000,100000), int4range(1000000,10000000)], int4range(1,4)),

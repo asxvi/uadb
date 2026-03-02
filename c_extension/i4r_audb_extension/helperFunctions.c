@@ -347,7 +347,7 @@ int range_distance(Int4Range a, Int4Range b){
   }
 }
 
-// reduce size inplace and return newly allocated RangeSet
+// reduce size and return newly allocated RangeSet
 /*
   sort the input and greedily merge. Traverses through entire set while we have more ranges than desires.
   O(N^2) worst case if numRangesKeep = N, we sort (NlogN), N times
@@ -373,9 +373,14 @@ Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep){
     normalized.ranges[0].lower = 0;
     normalized.ranges[0].upper = 0;
   }
-
-  sortedInput = sort(vals);
-
+  
+  // sortedInput = sort(vals);
+  sortedInput = normalize(vals);
+  // check size condition after normalize potential collapsing
+  if (sortedInput.count <= numRangesKeep) {
+    return sortedInput;
+  }
+  
   // ignore the NULL range at sortedInput.ranges[len-1]
   currNumRanges = sortedInput.count - (sortedInput.containsNull ? 1 : 0);
 
@@ -518,4 +523,98 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     pfree(result.ranges);
     
     return normOutput;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+// reduce size and return newly allocated RangeSet
+/*
+  sort the input and greedily merge. Traverses through entire set while we have more ranges than desires.
+  O(N^2) worst case if numRangesKeep = N, we sort (NlogN), N times
+*/
+Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep){
+  Int4RangeSet normalized;
+  Int4RangeSet sortedInput;
+  int currNumRanges;
+
+  if (vals.count <= numRangesKeep){
+    return vals;
+  }
+  else if (vals.count == 0){
+    normalized.count = 0;
+    normalized.containsNull = false;
+    normalized.ranges = NULL;
+  }
+  else if (vals.containsNull && vals.count == 1){
+    normalized.count = 1;
+    normalized.containsNull = true;
+    normalized.ranges = palloc(sizeof(Int4Range));
+    normalized.ranges[0].isNull = true;
+    normalized.ranges[0].lower = 0;
+    normalized.ranges[0].upper = 0;
+  }
+  
+  sortedInput = sort(vals);
+  // sortedInput = normalize(vals);
+  // check size condition after normalize potential collapsing
+  if (sortedInput.count <= numRangesKeep) {
+    return sortedInput;
+  }
+  
+  // ignore the NULL range at sortedInput.ranges[len-1]
+  currNumRanges = sortedInput.count - (sortedInput.containsNull ? 1 : 0);
+
+  while(currNumRanges >  numRangesKeep){
+    int bestDist;
+    int bestIndex;
+    int currDist;
+    int i;
+    int j;
+    Int4Range a;
+    Int4Range b;
+    Int4Range toInsert;
+
+    bestDist = -1;
+    bestIndex = -1;
+
+    // greedy look for smallest remaining gap
+    // O(N)
+    for(i=1; i<currNumRanges; i++){
+      currDist = abs(range_distance(sortedInput.ranges[i], sortedInput.ranges[i-1]));
+      
+      // compare distances and keep min difference between 2 ranges in entire set
+      if(bestDist < 0 || currDist < bestDist){
+        bestDist = currDist;
+        bestIndex = i-1;
+      }
+    }
+    
+    a = sortedInput.ranges[bestIndex];
+    b = sortedInput.ranges[bestIndex+1];
+
+    toInsert.lower = (a.lower < b.lower ? a.lower : b.lower);
+    toInsert.upper = (a.upper > b.upper ? a.upper : b.upper);
+
+    sortedInput.ranges[bestIndex] = toInsert;
+
+    for (j=bestIndex+1; j<currNumRanges-1; j++){
+      sortedInput.ranges[j] = sortedInput.ranges[j+1];
+    }
+
+    currNumRanges -= 1;
+  }
+
+  sortedInput.count = currNumRanges;
+
+  return sortedInput;
 }
