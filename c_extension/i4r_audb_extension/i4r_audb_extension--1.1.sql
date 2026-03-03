@@ -313,7 +313,7 @@ CREATE TYPE sum_set_metrics AS (
     reduceCalls bigint,
     maxIntervalCount bigint,
     totalIntervalCount bigint, 
-    combineCalls bigint
+    combineCalls bigint,
     minEffectiveIntervalCount bigint,
     convergedToTotSize bigint
 );

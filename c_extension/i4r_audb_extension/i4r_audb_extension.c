@@ -1534,6 +1534,7 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
     ArrayType *currSet;
     TypeCacheEntry *typcache;
     Int4RangeSet inputSet, combined, normalized, newState;
+    long currentCount;
     
     if (!AggCheckCallContext(fcinfo, &aggcontext))
         elog(ERROR, "agg_sum_set_transfunc called in non-aggregate context");
@@ -1629,10 +1630,11 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
         state->ranges = newState;
         
         // finds the optimal solution size and number of intervals
-        long currentCount = newState.count;
+        currentCount = newState.count;
         if (state->minEffectiveIntervalCount == 0 || currentCount < state->minEffectiveIntervalCount) {
             state->minEffectiveIntervalCount = currentCount;
-            state->convergedToTotSize = totalSpan(newState);  // sum of lengths of all intervals
+            // state->convergedToTotSize = totalSpan(newState);  // sum of lengths of all intervals
+            state->convergedToTotSize = 0;  // sum of lengths of all intervals
         }
 
         // free previous memory context
@@ -1641,7 +1643,7 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
     }
     
     PG_RETURN_POINTER(state);
-}
+    }
 
 /*
     returns a composite type containing:
