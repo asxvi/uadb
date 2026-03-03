@@ -13,30 +13,29 @@ class StatisticsPlotter:
     def __init__(self, resultFilepath: str, seed: str):
         self.resultFilepath = resultFilepath
         self.master_seed = seed
-    
+        self.iv = None
+        self.n_range_str = None
 
-    def parse_reduce_tuple(self, val):
-        """Parse reduce_triggerSz_sizeLim column."""
-        try:
-            return ast.literal_eval(str(val))
-        except:
-            return None
+    # ----------------------------------  
+    # --- MAIN entrypoint ---
+    # ----------------------------------
+    def plot_experiment_suite(self, csv_results: list) -> None:
+        ''' MAIN entrypoint '''
 
-    def load_all_csvs(self, csv_paths: List[str]) -> pd.DataFrame:
-        """Load and combine multiple experiment CSVs."""
-        dfs = []
-        for path in csv_paths:
-            df = pd.read_csv(path, index_col=0)
-            df['source_file'] = Path(path).parent.name  # track which experiment it came from
-            dfs.append(df)
+        df = self.load_all_csvs(csv_results)    
+        self.set_n_range_str(df)
+        iv = df['independent_variable'][0]
+        self.iv = iv
+
+        # plot stuff
+        self.plot_time_coverage_by_reduce(df, iv)
+        self.plot_reduction_heatmap(df, iv)
+        self.plot_3_row_red_vs_TimeNCover(df, iv)
+        self.plot_convergence_vs_n(df)
         
-        combined = pd.concat(dfs, ignore_index=True)
-        
-        # add in tuple representation vs string for convenience
-        combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
-        combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
-        return combined
+        print("Results saved in: ", self.resultFilepath)
 
+    # Not work
     def plot_experiment_group(self, group_csv_results: list, independent_variable: str) -> None:
         df = pd.read_csv(group_csv_results)
         
@@ -44,22 +43,16 @@ class StatisticsPlotter:
         self.run_reduce_plot_suite(df, independent_variable)
     
 
-    def plot_experiment_suite(self, csv_results: list) -> None:
-        ''' MAIN entrypoint '''
-        
-        df = self.load_all_csvs(csv_results)    
-        
-        iv = df['independent_variable'][0]
-        self.plot_time_coverage_by_reduce(df, iv)
-        self.plot_reduction_heatmap(df, iv)
-        self.plot_3_row_red_vs_TimeNCover(df, iv)
-        
-        print("Results saved in: ", self.resultFilepath)
+    # ----------------------------------  
+    # --- Plotting Code ---
+    # ----------------------------------
     
-    def plot_reduction_heatmap(self, df: pd.DataFrame, indep_variable: str) -> str:
+    # def plot_pareto_front(self, df: pd.DataFrame)
+    
+    def plot_reduction_heatmap(self, df: pd.DataFrame) -> str:
         """generate heatmap for reduction parameter tuning"""
         
-        # if indep_variable != self.REDUCE_PARAM_NAME:
+        # if self.iv != self.REDUCE_PARAM_NAME:
         #     return
         
         # parse tuple column
@@ -75,7 +68,7 @@ class StatisticsPlotter:
         fig, (ax) = plt.subplots(1, 1, figsize=(12, 5))
         param_str = (
             f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={sorted(df["dataset_size"].unique())} | '
+            f'n={self.n_range_str} | '
             f'gaps={sorted(df["gap_size_range"].unique())} | '
             f'widths={sorted(df["interval_width_range"].unique())} | '
             f'uncert={sorted(df["uncertain_ratio"].unique())} | '
@@ -94,11 +87,9 @@ class StatisticsPlotter:
         outfile = f'heatmap{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
         return outpath
     
-    # def plot_pareto_front(self, df: pd.DataFrame)
-
-
     def plot_time_coverage_by_reduce(self, df: pd.DataFrame, indep_variable: str) -> str:
         ''' plot time vs IV and coverage vs IV for'''
         # Sort dataframe by dataset size
@@ -107,11 +98,10 @@ class StatisticsPlotter:
         # Group by reduction parameters
         dfg = df_sorted.groupby(self.REDUCE_PARAM_NAME)
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-       
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)       
         param_str = (
             f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={sorted(df["dataset_size"].unique())} | '
+            f'n={self.n_range_str} | '
             f'gaps={sorted(df["gap_size_range"].unique())} | '
             f'widths={sorted(df["interval_width_range"].unique())} | '
             f'uncert={sorted(df["uncertain_ratio"].unique())} | '
@@ -153,9 +143,8 @@ class StatisticsPlotter:
         outfile = f'time_accuracy_sd{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
         return outpath
-    
-    # def plot_2_row_each_ni(self, df) -> str:
 
     def plot_3_row_red_vs_TimeNCover(self, df, iv) -> str:
         ''' calculates time/cover/distance vs redution params for each ni'''
@@ -174,7 +163,7 @@ class StatisticsPlotter:
         fig, axes=  plt.subplots(2, n, figsize=(6*n,12))
         param_str = (
             f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={sorted(df["dataset_size"].unique())} | '
+            f'n={self.n_range_str} | '
             f'gaps={sorted(df["gap_size_range"].unique())} | '
             f'widths={sorted(df["interval_width_range"].unique())} | '
             f'uncert={sorted(df["uncertain_ratio"].unique())} | '
@@ -226,10 +215,69 @@ class StatisticsPlotter:
         outfile = f'distance_vs_NI_and_red{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
+        return outpath
+    
+    def plot_convergence_vs_n(self, df: pd.DataFrame) -> str:
+        triggers = df['resizeTrigger'].unique()
+        plt.figure(figsize=(10, 6)) 
+        for trigger in triggers:
+            subdf = df[df['resizeTrigger'] == trigger]
+            plt.plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=f'trigger={trigger}')
+        
+        param_str = (
+            f' | iv={sorted(df["independent_variable"].unique())} | '
+            f"n={self.n_range_str} | "
+            f'gaps={sorted(df["gap_size_range"].unique())} | '
+            f'widths={sorted(df["interval_width_range"].unique())} | '
+            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
+            f'dataPath={self.resultFilepath} | '
+            f'seed={self.master_seed} | '
+        )
+        plt.text(0.5, -1.50, param_str, ha='center', fontsize=7, color='black')
+        plt.xlabel('Dataset Size')
+        plt.ylabel('Interval Count')
+        plt.title('Convergence for different triggers')
+        plt.legend()
+        plt.grid(True)
+        # plt.show()
+        outfile = f'convergence_vs_n_{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
         return outpath
 
-    
 
-    def safe_normalize(self, series):
-        r = series.max() - series.min()
-        return (series - series.min()) / r if r > 0 else pd.Series(0.0, index=series.index)
+
+    # ----------------------------------  
+    # --- helpers ---
+    # ----------------------------------
+    def get_dataset_size_bounds(self, df: pd.DataFrame) -> str:
+        sizes = sorted(df['dataset_size'].unique())
+        min_n = sizes[0]
+        max_n = sizes[-1]
+        if len(sizes) > 1:
+            step_n = sizes[1] - sizes[0]
+        else:
+            step_n = 0
+        
+        return f"{min_n}..{max_n} step {step_n}"
+
+    def set_n_range_str (self, df):
+            self.n_range_str = self.get_dataset_size_bounds(df)
+
+    def load_all_csvs(self, csv_paths: List[str]) -> pd.DataFrame:
+        """Load and combine multiple experiment CSVs. Do simple data processing for later convenience"""
+        dfs = []
+        for path in csv_paths:
+            df = pd.read_csv(path, index_col=0)
+            df['source_file'] = Path(path).parent.name  # track which experiment it came from
+            dfs.append(df)
+        
+        combined = pd.concat(dfs, ignore_index=True)
+        
+        # add in diff representations of red params for convenience
+        combined[['resizeTrigger', 'sizeLimit']] = combined['reduce_triggerSz_sizeLim'].str.strip('()').str.split(',', expand=True).astype(int)
+        combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
+        combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
+        return combined

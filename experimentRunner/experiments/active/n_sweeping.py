@@ -58,15 +58,15 @@ def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
     
     
     # suite.add(static_n_sweep(n, step, 500, 10))
-    # suite.add(static_n_sweep(n, step, 150, 10))
-    # suite.add(static_n_sweep(n, step, 50, 10))
+    suite.add(static_n_sweep(n, step, 150, 10))
+    suite.add(static_n_sweep(n, step, 50, 10))
     suite.add(static_n_sweep(n, step, 15, 10))
-    # suite.add(static_n_sweep(n, step, 10, 5))
-    # suite.add(static_n_sweep(n, step, 4, 2))
-    # suite.add(static_n_sweep(n, step, 9, 3))
-    # suite.add(static_n_sweep(n, step, 5, 2))
-    # suite.add(static_n_sweep(n, step, 3, 1))
-    # suite.add(static_n_sweep(n, step, 1, 1))
+    suite.add(static_n_sweep(n, step, 10, 5))
+    suite.add(static_n_sweep(n, step, 4, 2))
+    suite.add(static_n_sweep(n, step, 9, 3))
+    suite.add(static_n_sweep(n, step, 5, 2))
+    suite.add(static_n_sweep(n, step, 3, 1))
+    suite.add(static_n_sweep(n, step, 1, 1))
 
 # plot_all_n_sweep(100_000, 10000, 'n_sweeping100k')
 plot_all_n_sweep(4000, 100, 'n_sweeping4k')

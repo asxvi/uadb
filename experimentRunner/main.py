@@ -315,12 +315,10 @@ class ExperimentRunner:
                             try:
                                 cur.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE;')
                                 dropped+=1
-                                # print(f"  Dropping Table {table[0]}")
                             except Exception as e:
                                 print(f"    Failed to drop '{table}': {e}")
                                 raise
                         conn.commit()
-                        # print(f"  Committed batch {dropped}/{len(tables)} dropped so far")
                 except Exception as e:
                     print(f"    Error cleaning tables: {e}")
         print(f"\nDropped {dropped} tables\n")
@@ -518,8 +516,6 @@ class ExperimentRunner:
         combine_calls = result[6]
         min_int_count = result[7]
         tot_min_size = result[8]
-
-        print(min_int_count, tot_min_size)
 
         metrics = {
             'result': result_array,             # list of NumericRange objects
@@ -740,11 +736,10 @@ def run_all():
             results = _run_experiment_group(runner, suite.name, group)
             print(f'    Group results saved in: {runner.resultFilepath}')  
             suite_results.append(results)
-        
         print(suite_results)
 
         # plot aggregate results for suite
-        # _plot_experiment_suite(runner, suite_results)
+        _plot_experiment_suite(runner, suite_results)
 
     ### Clean after
     if args.clean_after:
@@ -784,7 +779,7 @@ def _run_experiment_group(runner: ExperimentRunner, suite_name: str, group: Expe
         runner.run_experiment(experiment)
 
     os.makedirs(runner.resultFilepath, exist_ok=True)
-    group_csv_path = f"{runner.resultFilepath}/results_sd{runner.master_seed}.csv"
+    group_csv_path = f"{runner.resultFilepath}results_sd{runner.master_seed}.csv"
     
     df = pd.DataFrame(runner.results)
     df.to_csv(group_csv_path, index=False)
