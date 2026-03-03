@@ -525,17 +525,16 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     return normOutput;
 }
 
-
-
-
-
-
-
-
-
-
-
-
+// linear scan through vals and accumulate coverage volume
+long totalSpan(Int4RangeSet vals)
+{
+  long volume = 0;
+  for (size_t i=0; i < vals.count; i++) {
+    volume += (vals.ranges[i].upper - vals.ranges[i].lower);
+  }
+  
+  return volume;
+}
 
 // reduce size and return newly allocated RangeSet
 /*

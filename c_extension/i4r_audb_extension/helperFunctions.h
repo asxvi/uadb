@@ -101,7 +101,7 @@ Int4RangeSet normalize(Int4RangeSet vals);
 Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep);
 Int4RangeSet filterOutNulls(Int4RangeSet vals);
 Int4RangeSet interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult);
-
+long totalSpan(Int4RangeSet vals);
 
 Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep);
 

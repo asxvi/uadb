@@ -1534,7 +1534,7 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
     ArrayType *currSet;
     TypeCacheEntry *typcache;
     Int4RangeSet inputSet, combined, normalized, newState;
-    long currentCount;
+    long currentSpan, currentCount;
     
     if (!AggCheckCallContext(fcinfo, &aggcontext))
         elog(ERROR, "agg_sum_set_transfunc called in non-aggregate context");
@@ -1629,14 +1629,32 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
         }
         state->ranges = newState;
         
-        // finds the optimal solution size and number of intervals
+        // attemp to track when collapse occurs and min width/ num ranges
+        currentSpan  = totalSpan(newState);
         currentCount = newState.count;
-        if (state->minEffectiveIntervalCount == 0 || currentCount < state->minEffectiveIntervalCount) {
-            state->minEffectiveIntervalCount = currentCount;
-            // state->convergedToTotSize = totalSpan(newState);  // sum of lengths of all intervals
-            state->convergedToTotSize = 0;  // sum of lengths of all intervals
-        }
+        
+        
+        // elog(INFO, "FINAL span = %ld, count = %ld",
+        //     currentSpan,
+        //     currentCount);
+            
+        // if (state->minEffectiveIntervalCount == 0) {
+        //     state->minEffectiveIntervalCount = currentCount;
+        //     state->convergedToTotSize = currentSpan;
+        // }
+        // else if (currentCount < state->minEffectiveIntervalCount) {
+        //     state->minEffectiveIntervalCount = currentCount;
+        //     state->convergedToTotSize = currentSpan;
+        // }
+        // else if (currentCount == state->minEffectiveIntervalCount &&
+        //         currentSpan < state->convergedToTotSize) {
+        //     state->convergedToTotSize = currentSpan;
+        // }
 
+        // elog(INFO, "FINAL span = %ld, count = %ld",
+        //     currentSpan,
+        //     currentCount);
+        
         // free previous memory context
         MemoryContextSwitchTo(oldcontext);        
         pfree(inputSet.ranges);
@@ -1667,7 +1685,9 @@ agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
     ArrayType *arr;
     Oid elemTypeOID;
     TypeCacheEntry *typcache;
-    
+    long currentSpan, currentCount;
+
+
     if (PG_ARGISNULL(0)) {
         PG_RETURN_NULL();
     }
@@ -1681,6 +1701,31 @@ agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
 
     normResult = normalize(state->ranges);
+
+    // elog(INFO, "FINAL span = %ld, count = %ld",
+    //  totalSpan(normResult),
+    //  normResult.count);
+
+    // attemp to track when collapse occurs and min width/ num ranges
+    currentSpan  = totalSpan(normResult);
+    currentCount = normResult.count;
+    // if (state->minEffectiveIntervalCount == 0) {
+    //     state->minEffectiveIntervalCount = currentCount;
+    //     state->convergedToTotSize = currentSpan;
+    // }
+    // else if (currentCount < state->minEffectiveIntervalCount) {
+    //     state->minEffectiveIntervalCount = currentCount;
+    //     state->convergedToTotSize = currentSpan;
+    // }
+    // else if (currentCount == state->minEffectiveIntervalCount &&
+    //         currentSpan < state->convergedToTotSize) {
+    //     state->convergedToTotSize = currentSpan;
+    // }
+    state->minEffectiveIntervalCount = currentCount;
+    state->convergedToTotSize = currentSpan;
+    // elog(INFO, "FINAL span = %ld, count = %ld",
+    //  totalSpan(normResult),
+    //  normResult.count);
 
     arr = serialize_ArrayType(normResult, typcache);
     values[0] = PointerGetDatum(arr);

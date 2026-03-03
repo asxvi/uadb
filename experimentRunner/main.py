@@ -230,7 +230,8 @@ class ExperimentRunner:
             'combine_calls': None,
             'result_size': None,
             'result_coverage': None,
-
+            'min_interval_count': None,
+            'total_min_coverage': None,
         }
         table = experiment.experiment_id
         config = self.DATA_TYPE_CONFIG[experiment.data_type]
@@ -258,6 +259,8 @@ class ExperimentRunner:
                         results['total_interval_count'] = metrics['total_interval_count']
                         results['combine_calls'] = metrics['combine_calls']
                         results['result_size'] = metrics['result_size']
+                        results['min_interval_count'] = metrics['min_interval_count']
+                        results['total_min_coverage'] = metrics['total_min_coverage']
                         results['result_coverage'] = self.__calculate_coverage(metrics['result'])
 
         except Exception as e:
@@ -494,7 +497,9 @@ class ExperimentRunner:
                 (result).reduceCalls,
                 (result).maxIntervalCount,
                 (result).totalIntervalCount,
-                (result).combineCalls
+                (result).combineCalls,
+                (result).minEffectiveIntervalCount,
+                (result).convergedToTotSize
             FROM (
                 SELECT sumTest({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
                 FROM {table}) subq;"""
@@ -511,6 +516,10 @@ class ExperimentRunner:
         max_interval_count = result[4]
         total_interval_count = result[5]
         combine_calls = result[6]
+        min_int_count = result[7]
+        tot_min_size = result[8]
+
+        print(min_int_count, tot_min_size)
 
         metrics = {
             'result': result_array,             # list of NumericRange objects
@@ -520,6 +529,8 @@ class ExperimentRunner:
             'max_interval_count': max_interval_count,
             'total_interval_count': total_interval_count,
             'combine_calls': combine_calls,
+            'min_interval_count': min_int_count,
+            'total_min_coverage': tot_min_size,
             'result_size': len(result_array) if result_array else 0,
         }
     
@@ -548,6 +559,8 @@ class ExperimentRunner:
         combine_calls = extract('combine_calls')
         result_sizes = extract('result_size')
         result_coverages = extract('result_coverage')
+        minEffectiveIntervalCount = extract('min_interval_count')
+        convergedToTotSize = extract('total_min_coverage')
 
         aggregated = {
             # experiment metadata
@@ -586,6 +599,8 @@ class ExperimentRunner:
             'total_interval_count_mean': np.mean(total_intervals) if total_intervals else None,
             'combine_calls_mean': np.mean(combine_calls) if combine_calls else None,
             'result_size_mean': np.mean(result_sizes) if result_sizes else None,
+            'minEffectiveIntervalCountMean': np.mean(minEffectiveIntervalCount) if minEffectiveIntervalCount else None,
+            'convergedToTotSize': np.mean(convergedToTotSize) if convergedToTotSize else None,
             'result_coverage_mean': np.mean(result_coverages) if result_coverages else None,
             # ^^ v3
         }
