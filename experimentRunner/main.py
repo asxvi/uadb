@@ -534,6 +534,7 @@ class ExperimentRunner:
            
     def __calculate_coverage(self, interval_set):
         '''adds all values contained within every interval in set'''
+        
         cover = 0
         for interval in interval_set:
             cover += interval.upper - interval.lower

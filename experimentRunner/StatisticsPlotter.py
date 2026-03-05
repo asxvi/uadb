@@ -28,9 +28,9 @@ class StatisticsPlotter:
         self.iv = iv
 
         # plot stuff
-        self.plot_time_coverage_by_reduce(df, iv)
-        self.plot_reduction_heatmap(df, iv)
-        self.plot_3_row_red_vs_TimeNCover(df, iv)
+        self.plot_time_coverage_by_reduce(df)
+        self.plot_reduction_heatmap(df)
+        self.plot_3_row_red_vs_TimeNCover(df)
         self.plot_convergence_vs_n(df)
         
         print("Results saved in: ", self.resultFilepath)
@@ -52,6 +52,7 @@ class StatisticsPlotter:
     def plot_reduction_heatmap(self, df: pd.DataFrame) -> str:
         """generate heatmap for reduction parameter tuning"""
         
+        iv = self.iv
         # if self.iv != self.REDUCE_PARAM_NAME:
         #     return
         
@@ -90,8 +91,11 @@ class StatisticsPlotter:
         plt.close()
         return outpath
     
-    def plot_time_coverage_by_reduce(self, df: pd.DataFrame, indep_variable: str) -> str:
+    def plot_time_coverage_by_reduce(self, df: pd.DataFrame) -> str:
         ''' plot time vs IV and coverage vs IV for'''
+
+        indep_variable = self.iv
+
         # Sort dataframe by dataset size
         df_sorted = df.sort_values(indep_variable)
 
@@ -146,9 +150,10 @@ class StatisticsPlotter:
         plt.close()
         return outpath
 
-    def plot_3_row_red_vs_TimeNCover(self, df, iv) -> str:
+    def plot_3_row_red_vs_TimeNCover(self, df: pd.DataFrame) -> str:
         ''' calculates time/cover/distance vs redution params for each ni'''
         
+        iv = self.iv
         if iv != 'num_intervals':
             return
 
