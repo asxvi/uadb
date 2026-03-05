@@ -32,6 +32,7 @@ class StatisticsPlotter:
         self.plot_reduction_heatmap(df)
         self.plot_3_row_red_vs_TimeNCover(df)
         self.plot_convergence_vs_n(df)
+        self.plot_convergence_vs_gap(df)
         
         print("Results saved in: ", self.resultFilepath)
 
@@ -252,6 +253,71 @@ class StatisticsPlotter:
         plt.close()
         return outpath
 
+    def plot_convergence_vs_gap(self, df: pd.DataFrame) -> str:
+        '''find when certain gap size ceonverge at what N '''
+
+        iv = self.iv
+        print(iv)
+        if iv != 'gap_size' and iv != 'gap_size_range':
+            return
+
+        gaps = sorted(df['gap_size_range_tuple'].unique())
+        reduce_params = sorted(
+            df[['resizeTrigger', 'sizeLimit']]
+            .drop_duplicates()
+            .itertuples(index=False, name=None)
+        )
+        
+        fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
+        param_str = (
+            f' | iv={sorted(df["independent_variable"].unique())} | '
+            f'n={self.n_range_str} | '
+            f'start={sorted(df["start_interval_range"].unique())} | '
+            f'gaps={sorted(df["gap_size_range"].unique())} | '
+            f'widths={sorted(df["interval_width_range"].unique())} | '
+            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
+            f'dataPath={self.resultFilepath} | '
+            f'seed={self.master_seed} | '
+        )
+        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
+
+
+        if len(gaps) == 1:
+            axes = [axes]
+            
+        for i, gap in enumerate(gaps):
+            ax = axes[i]
+            gap_df = df[df['gap_size_range_tuple'] == gap]
+
+            for trigger, size_limit in reduce_params:
+                subdf = gap_df[
+                    (gap_df['resizeTrigger'] == trigger) &
+                    (gap_df['sizeLimit'] == size_limit)
+                ].sort_values('dataset_size')
+
+                if subdf.empty:
+                    continue
+
+                ax.plot(
+                    subdf['dataset_size'],
+                    subdf['minEffectiveIntervalCountMean'],
+                    marker='o',
+                    label=f'({trigger}, {size_limit})'
+                )
+
+            ax.set_xlabel("Dataset Size (n)")
+            ax.set_ylabel("Min Effective Interval Count")
+            ax.set_title(f"Gap={gap}")
+            ax.grid(True)
+        
+        axes[0].legend(title="(trigger, reduce_to)")
+        plt.tight_layout()
+        # plt.show()
+        outfile = f'converge_vs_gap_{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
+        return outpath
 
 
     # ----------------------------------  
@@ -266,7 +332,8 @@ class StatisticsPlotter:
         else:
             step_n = 0
         
-        return f"{min_n}..{max_n} step {step_n}"
+        # return f"{min_n}..{max_n} step {step_n}"
+        return f"{min_n}..{max_n}"
 
     def set_n_range_str (self, df):
             self.n_range_str = self.get_dataset_size_bounds(df)

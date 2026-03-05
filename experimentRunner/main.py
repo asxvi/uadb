@@ -418,6 +418,7 @@ class ExperimentRunner:
             # next next start exceeds bounds, we can't add more intervals
             if experiment.domain_max is not None and start >= experiment.domain_max:
                 break
+        
 
         return RangeSetType(rset, cu=False)
 
@@ -570,6 +571,7 @@ class ExperimentRunner:
             'interval_size_range':experiment.interval_size_range,
             'mult_size_range': experiment.mult_size_range,
             'num_intervals': experiment.num_intervals,
+            'start_interval_range': experiment.start_interval_range,
             'gap_size': experiment.gap_size,
             'interval_width': experiment.interval_width,
             'num_intervals_range': experiment.num_intervals_range,
@@ -702,6 +704,14 @@ def format_name(experiment: ExperimentSettings):
     
     name = f"{dtype}_{sz}_{red}_{iv}{seed}"
     return name
+
+def make_log_sweep(n_min, n_max, points):
+    '''return nonlinear sample space. clustered in beginning/ log'''
+    return sorted(set(int(x) for x in np.logspace(
+        np.log10(n_min),
+        np.log10(n_max),
+        points
+    )))
 
 def run_all():
     '''
