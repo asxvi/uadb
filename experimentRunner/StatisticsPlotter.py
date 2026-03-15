@@ -15,6 +15,7 @@ class StatisticsPlotter:
         self.master_seed = seed
         self.iv = None
         self.n_range_str = None
+        self.param_str = None
 
     # ----------------------------------  
     # --- MAIN entrypoint ---
@@ -24,6 +25,7 @@ class StatisticsPlotter:
 
         df = self.load_all_csvs(csv_results)    
         self.set_n_range_str(df)
+        self.build_param_str(df)
         iv = df['independent_variable'][0]
         self.iv = iv
 
@@ -33,6 +35,7 @@ class StatisticsPlotter:
         self.plot_3_row_red_vs_TimeNCover(df)
         self.plot_convergence_vs_n(df)
         self.plot_convergence_vs_gap(df)
+        self.plot_time_vs_result_size(df)
         
         print("Results saved in: ", self.resultFilepath)
 
@@ -52,11 +55,7 @@ class StatisticsPlotter:
     
     def plot_reduction_heatmap(self, df: pd.DataFrame) -> str:
         """generate heatmap for reduction parameter tuning"""
-        
-        iv = self.iv
-        # if self.iv != self.REDUCE_PARAM_NAME:
-        #     return
-        
+                
         # parse tuple column
         parsed = df[self.REDUCE_PARAM_NAME].apply(
             lambda x: eval(x) if isinstance(x, str) else x
@@ -68,16 +67,7 @@ class StatisticsPlotter:
         sum_pivot = df.pivot_table(values='sum_time_mean', index='reduce_to_sz', columns='trigger_sz')   
         
         fig, (ax) = plt.subplots(1, 1, figsize=(12, 5))
-        param_str = (
-            f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={self.n_range_str} | '
-            f'gaps={sorted(df["gap_size_range"].unique())} | '
-            f'widths={sorted(df["interval_width_range"].unique())} | '
-            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
-            f'dataPath={self.resultFilepath} | '
-            f'seed={self.master_seed} | '
-        )
-        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
 
         # SUM heatmap, focused on reduction params
         sns.heatmap(sum_pivot, annot=True, fmt='.1f', cmap='RdYlGn_r', ax=ax, cbar_kws={'label': 'Time (ms)'})
@@ -104,16 +94,7 @@ class StatisticsPlotter:
         dfg = df_sorted.groupby(self.REDUCE_PARAM_NAME)
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)       
-        param_str = (
-            f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={self.n_range_str} | '
-            f'gaps={sorted(df["gap_size_range"].unique())} | '
-            f'widths={sorted(df["interval_width_range"].unique())} | '
-            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
-            f'dataPath={self.resultFilepath} | '
-            f'seed={self.master_seed} | '
-        )
-        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
         for p, group in dfg:
             # Make sure each group is sorted by dataset_size
             group = group.sort_values(indep_variable)
@@ -167,16 +148,7 @@ class StatisticsPlotter:
         # 2: Distance = sqrt(time^2 + cover^2)
         # fig, axes=  plt.subplots(3, n, figsize=(6*n,12))
         fig, axes=  plt.subplots(2, n, figsize=(6*n,12))
-        param_str = (
-            f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={self.n_range_str} | '
-            f'gaps={sorted(df["gap_size_range"].unique())} | '
-            f'widths={sorted(df["interval_width_range"].unique())} | '
-            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
-            f'dataPath={self.resultFilepath} | '
-            f'seed={self.master_seed} | '
-        )
-        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
 
         for i, ni in enumerate(sorted(df['num_intervals'].unique())):
             # plot for each ni
@@ -226,31 +198,24 @@ class StatisticsPlotter:
     
     def plot_convergence_vs_n(self, df: pd.DataFrame) -> str:
         triggers = df['resizeTrigger'].unique()
-        plt.figure(figsize=(10, 6)) 
+        fig, (ax) = plt.subplots(1, 1, figsize=(12, 5))
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
+        
         for trigger in triggers:
             subdf = df[df['resizeTrigger'] == trigger]
-            plt.plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=f'trigger={trigger}')
+            ax.plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=f'trigger={trigger}')
         
-        param_str = (
-            f' | iv={sorted(df["independent_variable"].unique())} | '
-            f"n={self.n_range_str} | "
-            f'gaps={sorted(df["gap_size_range"].unique())} | '
-            f'widths={sorted(df["interval_width_range"].unique())} | '
-            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
-            f'dataPath={self.resultFilepath} | '
-            f'seed={self.master_seed} | '
-        )
-        plt.text(0.5, -1.50, param_str, ha='center', fontsize=7, color='black')
-        plt.xlabel('Dataset Size')
-        plt.ylabel('Interval Count')
-        plt.title('Convergence for different triggers')
-        plt.legend()
-        plt.grid(True)
-        # plt.show()
+        ax.set_xlabel('Dataset Size')
+        ax.set_ylabel('Interval Count')
+        ax.set_title('Convergence for different triggers')
+        ax.legend()
+        ax.grid(True)
+        
+        plt.tight_layout()
         outfile = f'convergence_vs_n_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
-        plt.close()
+        plt.close(fig)
         return outpath
 
     def plot_convergence_vs_gap(self, df: pd.DataFrame) -> str:
@@ -269,18 +234,7 @@ class StatisticsPlotter:
         )
         
         fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
-        param_str = (
-            f' | iv={sorted(df["independent_variable"].unique())} | '
-            f'n={self.n_range_str} | '
-            f'start={sorted(df["start_interval_range"].unique())} | '
-            f'gaps={sorted(df["gap_size_range"].unique())} | '
-            f'widths={sorted(df["interval_width_range"].unique())} | '
-            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
-            f'dataPath={self.resultFilepath} | '
-            f'seed={self.master_seed} | '
-        )
-        fig.text(0.5, -0.02, param_str, ha='center', fontsize=7, color='black')
-
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
 
         if len(gaps) == 1:
             axes = [axes]
@@ -314,6 +268,50 @@ class StatisticsPlotter:
         plt.tight_layout()
         # plt.show()
         outfile = f'converge_vs_gap_{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
+        return outpath
+
+    def plot_time_vs_result_size(self, df: pd.DataFrame) -> str:
+        '''scatter of time vs result_size and time vs coverage, one point per reduction config'''
+        
+        grouped = df.groupby(self.REDUCE_PARAM_NAME).agg(
+            time=('sum_time_mean', 'mean'),
+            coverage=('result_coverage_mean', 'mean'),
+            result_size=('result_size_mean', 'mean'),
+        ).reset_index()
+    
+        labels = grouped[self.REDUCE_PARAM_NAME].values
+    
+        # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        fig, (ax2) = plt.subplots(1, 1, figsize=(14, 6))
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7)
+    
+        for i, label in enumerate(labels):
+            # time vs coverage
+            # ax1.scatter(grouped['time'].iloc[i], grouped['coverage'].iloc[i], zorder=3)
+            # ax1.annotate(str(label), 
+            #              (grouped['time'].iloc[i], grouped['coverage'].iloc[i]),
+            #              textcoords="offset points", xytext=(5, 5), fontsize=7)
+            # time vs result_size
+            ax2.scatter(grouped['time'].iloc[i], grouped['result_size'].iloc[i], zorder=3)
+            ax2.annotate(str(label),
+                         (grouped['time'].iloc[i], grouped['result_size'].iloc[i]),
+                         textcoords="offset points", xytext=(5, 5), fontsize=7)
+    
+        # ax1.set_xlabel('Avg Time (ms)')
+        # ax1.set_ylabel('Avg Coverage (lower = less overapproximation)')
+        # ax1.set_title('Time vs Overapproximation')
+        # ax1.grid(True, alpha=0.3)
+    
+        ax2.set_xlabel('Avg Time (ms)')
+        ax2.set_ylabel('Avg Result Size (lower = more precise)')
+        ax2.set_title('Time vs Result Size')
+        ax2.grid(True, alpha=0.3)
+    
+        plt.tight_layout()
+        outfile = f'time_vs_accuracy_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -353,3 +351,15 @@ class StatisticsPlotter:
         combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
         combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
         return combined
+
+    def build_param_str(self, df) -> str:
+        self.param_str = (
+            f' | iv={sorted(df["independent_variable"].unique())} | '
+            f'n={self.n_range_str} | '
+            f'start={sorted(df["start_interval_range"].unique())} | '
+            f'gaps={sorted(df["gap_size_range"].unique())} | '
+            f'widths={sorted(df["interval_width_range"].unique())} | '
+            f'uncert={sorted(df["uncertain_ratio"].unique())} | '
+            f'dataPath={self.resultFilepath} | '
+            f'seed={self.master_seed} | '
+        )

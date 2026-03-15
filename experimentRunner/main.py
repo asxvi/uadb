@@ -157,39 +157,6 @@ class ExperimentRunner:
         self.groupName = None
         self.csv_paths = []
 
-    # def run_experiment(self, experiment: ExperimentSettings) -> list:
-    #     '''an experiement has N trials. generate data for each trial, run queries//benchmark results, and append to results'''    
-    #     # generate data for each trial. Insert ddl to file optinally. After inserting to DB, run tests
-    #     experiment_results = []
-        
-    #     for trial in range(experiment.num_trials):
-    #         # create a trial seed dependent on the master seed, and specific trial number
-    #         experiment.curr_trial = trial+1
-    #         self.trial_seed = (self.master_seed + experiment.curr_trial) % (2**32)
-    #         np.random.seed(self.trial_seed)
-    #         experiment.experiment_id = self.__generate_name(experiment)
-            
-    #         # only gen new data on first trial. otherwise, we keep same data between trials
-    #         if trial == 0:
-    #             # get randomly generated data for curr seed
-    #             db_data_format, file_data_format = self.generate_data(experiment)
-
-
-    #         # DOES NOT WORK properly # save in ddl compatible format. Insert into DB regardless... need to run tests.
-    #         if experiment.save_ddl:
-    #             self.__save_ddl_file(experiment, file_data_format)
-            
-    #         self.__insert_data_db(experiment, db_data_format)
-
-    #         # run queries and benchmark
-    #         trial_results = self.run_queries(experiment)
-    #         experiment_results.append(trial_results)
-
-    #     aggregated_results = self.__calc_aggregate_results(experiment, experiment_results)
-    #     self.results.append(aggregated_results)
-
-    #     return experiment_results
-
     def run_experiment(self, experiment: ExperimentSettings) -> list:
         experiment_results = []
 
@@ -209,7 +176,7 @@ class ExperimentRunner:
 
         for trial in range(experiment.num_trials):
             experiment.curr_trial = trial + 1
-            # print(f' trial:{experiment.curr_trial}')
+            print(f' trial:{experiment.curr_trial}')
             # experiment_id stays the same every trial — same table, same data
             # experiment.experiment_id = self.__generate_name(experiment)
 
@@ -278,7 +245,7 @@ class ExperimentRunner:
                     cur.execute(f"SELECT COUNT(*) FROM {table};")
                     results['row_count'] = cur.fetchone()[0]
                     
-                    # print(f" DEBUG SQL- running aggs on : {table}") 
+                    print(f" DEBUG SQL- running aggs on : {table}") 
                     
                     # aggreate metrics
                     results['sum_time'] = self.__run_aggregate(cur, table, 'SUM', config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1])
