@@ -9,6 +9,13 @@ experiments is a dict of {str: ExperimentGroup}. ALlows for many unrelated exper
 Naming convention is "GroupName/ID": {ExperimentGroup of related experiments}
 persists in namespace of caller program
 '''
+
+# zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
+zipf = DistributionConfig()
+zipf.distribution = DistributionType.ZIPFIAN
+zipf.pos_zipf_a = 1.3
+zipf.width_zipf_a = 1.1
+
 experiments = dict()
 
 # dummy used to access members
@@ -49,7 +56,8 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
                     # start_interval_range     = (1, 10_000),
                     # start_interval_range     = (1, 50_000),
                     start_interval_range     = (1, 100_000),
-                    gap_size_range           = (g, g + gap_width),  # fix the gap size
+                    # gap_size_range           = (g, 2 * g),  # fix the gap size
+                    gap_size_range           = (g, g + 1),  # fix the gap size
                     interval_width_range     = (5, 6),
                     num_intervals            = ni,
                     reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
@@ -74,6 +82,8 @@ def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 150, 10, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 50, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 10, 1000))
+
+
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 15, 10, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 10, 5, 1000))
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 4, 2, 1000))
@@ -81,7 +91,7 @@ def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 5, 2, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 3, 1, 1000))
 
-n_list = make_log_sweep(1, 2000, 40)
+n_list = make_log_sweep(1, 100000, 20)
 print(len(n_list))
 plot_ni_gap_sweep(5, n_list)
 

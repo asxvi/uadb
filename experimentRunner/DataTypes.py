@@ -306,28 +306,28 @@ class DataType(Enum):
     RANGE = RangeType
     SET = RangeSetType
 
-class DataDistribution(Enum):
+class DistributionType(Enum):
     UNIFORM     = 1
     NORMAL      = 2
-    LOGNORMAL   = 3
-    ZIPFIAN     = 4
-    POISSON     = 5
-    CLUSTERED   = 6
+    ZIPFIAN     = 3
+    CLUSTERED   = 4
     
 @dataclass
 class DistributionConfig:
-    distribution: DataDistribution = DataDistribution.UNIFORM
-    
+    distribution: DistributionType = DistributionType.UNIFORM
+
     # normal
-    mean: float = None
-    std: float = None
+    pos_mean: float = None
+    pos_std: float = None
+    width_mean: float = None
+    width_std: float = None
 
     # zipfian
-    zipf_a: float = 1.5
-
-    # poisson
-    lam:float = 5.0
+    pos_zipf_a: float = 1.5
+    width_zipf_a: float = 1.5
 
     # clustered
-    n_clusters: int = 5
-    cluster_spread = 0.1
+    pos_n_clusters: int = 5
+    pos_cluster_spread: float = 0.1
+    width_n_clusters: int = 5
+    width_cluster_spread: float = 0.1

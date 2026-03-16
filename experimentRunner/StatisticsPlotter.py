@@ -274,49 +274,45 @@ class StatisticsPlotter:
         return outpath
 
     def plot_time_vs_result_size(self, df: pd.DataFrame) -> str:
-        '''scatter of time vs result_size and time vs coverage, one point per reduction config'''
+        '''1 x n plot of time vs result_size per gap size, one point per reduction config'''
         
-        grouped = df.groupby(self.REDUCE_PARAM_NAME).agg(
-            time=('sum_time_mean', 'mean'),
-            coverage=('result_coverage_mean', 'mean'),
-            result_size=('result_size_mean', 'mean'),
-        ).reset_index()
+        gaps = sorted(df['gap_size_range_tuple'].unique())
+        n_gaps = len(gaps)
     
-        labels = grouped[self.REDUCE_PARAM_NAME].values
-    
-        # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-        fig, (ax2) = plt.subplots(1, 1, figsize=(14, 6))
+        fig, axes = plt.subplots(1, n_gaps, figsize=(6 * n_gaps, 6), sharey=True)
         fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7)
     
-        for i, label in enumerate(labels):
-            # time vs coverage
-            # ax1.scatter(grouped['time'].iloc[i], grouped['coverage'].iloc[i], zorder=3)
-            # ax1.annotate(str(label), 
-            #              (grouped['time'].iloc[i], grouped['coverage'].iloc[i]),
-            #              textcoords="offset points", xytext=(5, 5), fontsize=7)
-            # time vs result_size
-            ax2.scatter(grouped['time'].iloc[i], grouped['result_size'].iloc[i], zorder=3)
-            ax2.annotate(str(label),
-                         (grouped['time'].iloc[i], grouped['result_size'].iloc[i]),
-                         textcoords="offset points", xytext=(5, 5), fontsize=7)
+        if n_gaps == 1:
+            axes = [axes]
     
-        # ax1.set_xlabel('Avg Time (ms)')
-        # ax1.set_ylabel('Avg Coverage (lower = less overapproximation)')
-        # ax1.set_title('Time vs Overapproximation')
-        # ax1.grid(True, alpha=0.3)
+        for i, gap in enumerate(gaps):
+            ax = axes[i]
+            gap_df = df[df['gap_size_range_tuple'] == gap]
     
-        ax2.set_xlabel('Avg Time (ms)')
-        ax2.set_ylabel('Avg Result Size (lower = more precise)')
-        ax2.set_title('Time vs Result Size')
-        ax2.grid(True, alpha=0.3)
+            grouped = gap_df.groupby(self.REDUCE_PARAM_NAME).agg(
+                time=('sum_time_mean', 'mean'),
+                result_size=('result_size_mean', 'mean'),
+            ).reset_index()
+    
+            for _, row in grouped.iterrows():
+                ax.scatter(row['time'], row['result_size'], zorder=3)
+                ax.annotate(str(row[self.REDUCE_PARAM_NAME]),
+                            (row['time'], row['result_size']),
+                            textcoords="offset points", xytext=(5, 5), fontsize=7)
+    
+            ax.set_title(f'gap={gap}')
+            ax.set_xlabel('Avg Time (ms)')
+            ax.grid(True, alpha=0.3)
+    
+        axes[0].set_ylabel('Avg Result Size (# intervals)')
+        fig.suptitle('Time vs Result Size by Gap Size\n(bottom-left = ideal)', y=1.02)
     
         plt.tight_layout()
-        outfile = f'time_vs_accuracy_{self.master_seed}'
+        outfile = f'time_vs_result_size_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
         return outpath
-
 
     # ----------------------------------  
     # --- helpers ---

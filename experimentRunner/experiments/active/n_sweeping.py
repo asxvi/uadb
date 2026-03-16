@@ -9,6 +9,7 @@ experiments is a dict of {str: ExperimentGroup}. ALlows for many unrelated exper
 Naming convention is "GroupName/ID": {ExperimentGroup of related experiments}
 persists in namespace of caller program
 '''
+
 experiments = dict()
 
 # dummy used to access members
@@ -24,6 +25,7 @@ template = ExperimentSettings(
     gap_size_range=(0,100), 
     name= "temp",
     reduce_triggerSz_sizeLim=(10, 5),
+    distribution_config= zipf,
 )
 
 def static_n_sweep(max_n: int = 100_000, step: int = 10_000, trigger_size: int = 10, reduce_to_size: int = 5):
@@ -42,6 +44,7 @@ def static_n_sweep(max_n: int = 100_000, step: int = 10_000, trigger_size: int =
             interval_width_range     = (1, 100),
             num_intervals            = 5,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
+            
         )
 
         experiment.name = format_name(experiment)

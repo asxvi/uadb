@@ -63,8 +63,8 @@ class ExperimentSettings:
 
     '''
     name: str                                   # required 
-    # distribution_config: DistributionConfig = field(default_factory=DistributionConfig)     # distribution type
     data_type: DataType                         # always Set or Range
+    distribution_config: DistributionConfig = field(default_factory=DistributionConfig)     # distribution type
     curr_trial: int = 0                         # keep track locally 
     experiment_id: str = None                   # unique string name that identifies specific experiment
     num_trials: int = 1                         # always fixed
@@ -197,9 +197,11 @@ class ExperimentRunner:
         
         for i in range(experiment.dataset_size):
             if experiment.data_type == DataType.RANGE:
-                obj = self.__generate_range(experiment)
+                obj = self.__generate_range2(experiment)
+                # obj = self.__generate_range(experiment)
                 val = str(obj) if not obj.isNone else None
             elif experiment.data_type == DataType.SET:
+                obj = self.__generate_set2(experiment)
                 obj = self.__generate_set(experiment)
                 val = str(obj) if (obj.rset and not getattr(obj, 'isNone', False)) else None
 
@@ -350,7 +352,113 @@ class ExperimentRunner:
     
     # ----------------------------------  
     # --- Internal Helpers (Private) ---
-    # ----------------------------------
+    # ----------------------------------    
+    def __sample_int(self, low: int, high: int, experiment:ExperimentSettings, isWidth: bool=False) -> int:
+        '''sample a single int in [low, high) using specified distribution'''
+        if low >= high:
+            return low
+        
+        dist = experiment.distribution_config
+        
+        if dist.distribution == DistributionType.UNIFORM:
+            return int(np.random.randint(low, high))
+        
+        elif dist.distribution == DistributionType.NORMAL:
+            # defaultize the lack of input... maybe just raise here
+            if isWidth:
+                mean = dist.width_mean if dist.width_mean is not None else (low + high) / 2
+                std  = dist.width_std if dist.width_std is not None else (high - low) / 6
+            else:
+                mean = dist.pos_mean if dist.pos_mean is not None else (low + high) / 2
+                std  = dist.pos_std if dist.pos_std is not None else (high - low) / 6
+            return int(np.clip(random.normal(mean, std), low, high))
+        
+        elif dist.distribution == DistributionType.ZIPFIAN:
+            if isWidth:
+                val = int(np.random.zipf(dist.width_zipf_a)) -1
+            else:
+                val = int(np.random.zipf(dist.pos_zipf_a)) -1
+
+            return int(np.clip(val + low, low, high - 1))
+        
+        elif dist.distribution == DistributionType.CLUSTERED:
+            raise NotImplementedError("Stuggled on clustered, but this would be good i think!")
+            return int(np.random.randint(low, high))
+        
+        raise ValueError(f"Unknown distribution: {dist.distribution}")
+        
+    def __generate_range2(self, experiment:ExperimentSettings) -> RangeType:
+        # uncertain ratio. distributed half as value NULLS, and other half as mult = [0,X]
+        if np.random.random() < experiment.uncertain_ratio * 0.5:  
+            return RangeType(0, 0, True)
+        
+        low, high = experiment.interval_size_range
+        lb = self.__sample_int(low, high, experiment, False)
+        width = self.__sample_int(low, high, experiment, True)
+        return RangeType(lb, lb + width)
+    
+    def __generate_set2(self, experiment:ExperimentSettings) -> RangeSetType:
+        # if experiment.num_intervals is not None then use, otherwise if experiment.num_intervals_range then use. otherwise raise error
+        if experiment.num_intervals is not None:
+            num_intervals = experiment.num_intervals
+        elif experiment.num_intervals_range is not None:
+            num_intervals = np.random.randint(*experiment.num_intervals_range)
+        else:
+            raise ValueError("Either num_intervals or num_intervals_range must be specified")
+        
+        # entire set is unknown
+        if np.random.random() < experiment.uncertain_ratio * 0.5:  
+            return RangeSetType([], cu=False)
+        
+        rset = []
+
+        # set the first starting point
+        if experiment.start_interval_range is not None:
+            start = self.__sample_int(*experiment.start_interval_range, experiment, False)
+            # start = np.random.randint(*experiment.start_interval_range)
+        else:
+            start = experiment.interval_size_range[0]
+
+        # for each interval
+        for i in range(num_intervals):    
+            if np.random.random() < experiment.uncertain_ratio * 0.5:  
+                continue
+            
+            # get the interval width
+            if experiment.interval_width is not None:
+                interval_width = experiment.interval_width
+            elif experiment.interval_width_range is not None:
+                # interval_width = np.random.randint(*experiment.interval_width_range)
+                interval_width = self.__sample_int(*experiment.interval_width_range, experiment, True)
+            else:
+                raise ValueError("Either interval_width or interval_width_range must be specified")
+            interval_end = start + max(1, interval_width)
+            
+            # should never trigger, incase does
+            if interval_end <= start:
+                print(f"BAD RANGE: start={start}, interval_end={interval_end}, width={interval_width}, i={i}")
+                rset.append(RangeType([], interval_end, False))  
+            else:     
+                rset.append(RangeType(start, interval_end, False))
+
+            # find next gap if not last
+            if i < num_intervals -1:
+                if experiment.gap_size is not None:
+                    gap = experiment.gap_size
+                elif experiment.gap_size_range is not None:
+                    gap = self.__sample_int(*experiment.gap_size_range, experiment)
+                    # gap = np.random.randint(*experiment.gap_size_range)
+                else:
+                    gap = 0  
+                
+                start = interval_end + gap
+
+            # next next start exceeds bounds, we can't add more intervals
+            if experiment.domain_max is not None and start >= experiment.domain_max:
+                break
+        
+        return RangeSetType(rset, cu=False)
+
     def __generate_range(self, experiment:ExperimentSettings) -> RangeType:
         # uncertain ratio. maybe should account for half nulls, half mult 0
         if np.random.random() < experiment.uncertain_ratio * 0.5:  
@@ -363,9 +471,8 @@ class ExperimentRunner:
         if lb > ub:
             lb, ub = ub, lb
         return RangeType(lb, ub)
-    
+
     def __generate_set(self, experiment:ExperimentSettings) -> RangeSetType:
-        
         # if experiment.num_intervals is not None then use, otherwise if experiment.num_intervals_range then use. otherwise raise error
         if experiment.num_intervals is not None:
             num_intervals = experiment.num_intervals
@@ -792,7 +899,7 @@ def _run_experiment_group(runner: ExperimentRunner, suite_name: str, group: Expe
     # for every experiment within group, run it
     for experiment in group.experiments.values():
         runner.run_experiment(experiment)
-
+    
     os.makedirs(runner.resultFilepath, exist_ok=True)
     group_csv_path = f"{runner.resultFilepath}results_sd{runner.master_seed}.csv"
     
