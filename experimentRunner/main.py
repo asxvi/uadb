@@ -81,9 +81,10 @@ class ExperimentSettings:
     interval_width: int = None
     interval_width_range: tuple = None
     num_intervals: int = None       
-    gap_size: int = None
     num_intervals_range: tuple = None
+    gap_size: int = None
     gap_size_range: tuple = None    
+    gap_size_sequence: list = None  # sequence of gaps. allows for creating outlier ex. [5, 5, 5, 10000]
     
     mode: str = None                # NOT USED YET what modes of test suite to execute
     save_ddl:bool = False           # store ddl code to make tables 
@@ -198,11 +199,11 @@ class ExperimentRunner:
         for i in range(experiment.dataset_size):
             if experiment.data_type == DataType.RANGE:
                 obj = self.__generate_range2(experiment)
-                # obj = self.__generate_range(experiment)
+                # obj = self.__generate_range(experiment)   # only does uniform dist
                 val = str(obj) if not obj.isNone else None
             elif experiment.data_type == DataType.SET:
                 obj = self.__generate_set2(experiment)
-                obj = self.__generate_set(experiment)
+                # obj = self.__generate_set(experiment)     # only does uniform dist
                 val = str(obj) if (obj.rset and not getattr(obj, 'isNone', False)) else None
 
             mult_obj = self.__generate_mult(experiment)
@@ -442,14 +443,19 @@ class ExperimentRunner:
                 rset.append(RangeType(start, interval_end, False))
 
             # find next gap if not last
-            if i < num_intervals -1:
-                if experiment.gap_size is not None:
+            if i < num_intervals - 1:
+                if experiment.gap_size_sequence is not None:
+                    print('oyoyoyoyoyo')
+                    idx = min(i, len(experiment.gap_size_sequence) - 1)
+                    val = experiment.gap_size_sequence[idx]
+                    # tuple = sample randomly in range, int = fixed gap
+                    gap = int(np.random.randint(val[0], val[1] + 1)) if isinstance(val, tuple) else int(val)
+                elif experiment.gap_size is not None:
                     gap = experiment.gap_size
                 elif experiment.gap_size_range is not None:
                     gap = self.__sample_int(*experiment.gap_size_range, experiment)
-                    # gap = np.random.randint(*experiment.gap_size_range)
                 else:
-                    gap = 0  
+                    gap = 0
                 
                 start = interval_end + gap
 
@@ -654,6 +660,29 @@ class ExperimentRunner:
     def __calc_aggregate_results(self, experiment: ExperimentSettings, trial_results: dict) -> dict:
         ''' combines all result data, and returns dict of all experiment metadata leter used to convert to CSV'''
 
+        dist = experiment.distribution_config
+        distribution_fields = {}
+
+        if dist.distribution == DistributionType.NORMAL:
+            distribution_fields = {
+                'pos_mean': dist.pos_mean,
+                'pos_std': dist.pos_std,
+                'width_mean': dist.width_mean,
+                'width_std': dist.width_std,
+            }
+        elif dist.distribution == DistributionType.ZIPFIAN:
+            distribution_fields = {
+                'pos_zipf_a': dist.pos_zipf_a,
+                'width_zipf_a': dist.width_zipf_a,
+            }
+        elif dist.distribution == DistributionType.CLUSTERED:
+            distribution_fields = {
+                'pos_n_clusters': dist.pos_n_clusters,
+                'pos_cluster_spread': dist.pos_cluster_spread,
+                'width_n_clusters': dist.width_n_clusters,
+                'width_cluster_spread': dist.width_cluster_spread,
+            }
+
         def extract(key):
             return [r[key] for r in trial_results if r.get(key) is not None]
 
@@ -689,6 +718,8 @@ class ExperimentRunner:
             'interval_width_range': experiment.interval_width_range,
             'reduce_triggerSz_sizeLim': experiment.reduce_triggerSz_sizeLim,
             'independent_variable': experiment.independent_variable,
+            'distribution': dist.distribution,
+            **distribution_fields,
 
             # MIN stats
             'min_time_mean': np.mean(min_times) if min_times else None,

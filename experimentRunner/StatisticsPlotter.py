@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from typing import List
+from DataTypes import *
 
 class StatisticsPlotter:
     """ handles all statistical analysis and visualization of experiment results"""
@@ -348,11 +349,29 @@ class StatisticsPlotter:
         combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
         return combined
 
+    def build_dist_str(self, df) -> str:
+        dist = df['distribution'].iloc[0]
+        if isinstance(dist, str):
+            dist = DistributionType[dist.split('.')[-1]]  # "DistributionType.ZIPFIAN" -> DistributionType.ZIPFIAN
+
+
+        if dist == DistributionType.NORMAL:
+            return (f'normal(pos_mean={df['pos_mean'].iloc[0]}, pos_std={df['pos_std'].iloc[0]}, '
+                    f'width_mean={df['width_mean'].iloc[0]}, width_std={df['width_std'].iloc[0]})')
+        elif dist == DistributionType.ZIPFIAN:
+            return (f'zipfian(pos_a={df['pos_zipf_a'].iloc[0]}, width_a={df['width_zipf_a'].iloc[0]})')
+        elif dist == DistributionType.CLUSTERED:
+            return (f'clustered(pos_clusters={df['pos_n_clusters'].iloc[0]}, pos_spread={df['pos_cluster_spread'].iloc[0]}, '
+                    f'width_clusters={df['width_n_clusters'].iloc[0]}, width_spread={df['width_cluster_spread'].iloc[0]})')
+        else:
+            return 'distribution=unknown'
+    
     def build_param_str(self, df) -> str:
         self.param_str = (
             f' | iv={sorted(df["independent_variable"].unique())} | '
             f'n={self.n_range_str} | '
             f'start={sorted(df["start_interval_range"].unique())} | '
+            f'dist= {self.build_dist_str(df)}| '
             f'gaps={sorted(df["gap_size_range"].unique())} | '
             f'widths={sorted(df["interval_width_range"].unique())} | '
             f'uncert={sorted(df["uncertain_ratio"].unique())} | '

@@ -331,3 +331,6 @@ class DistributionConfig:
     pos_cluster_spread: float = 0.1
     width_n_clusters: int = 5
     width_cluster_spread: float = 0.1
+
+    # def to_dict(self):
+    #     return {f.name: getattr(self, f.name) for f in fields(self)}

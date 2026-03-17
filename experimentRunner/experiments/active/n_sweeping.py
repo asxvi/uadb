@@ -10,6 +10,12 @@ Naming convention is "GroupName/ID": {ExperimentGroup of related experiments}
 persists in namespace of caller program
 '''
 
+# zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
+zipf = DistributionConfig()
+zipf.distribution = DistributionType.ZIPFIAN
+zipf.pos_zipf_a = 1.8
+zipf.width_zipf_a = 1.5
+
 experiments = dict()
 
 # dummy used to access members
@@ -60,16 +66,16 @@ def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
     suite = experiments[suite_name]
     
     
-    suite.add(static_n_sweep(n, step, 500, 10))
-    suite.add(static_n_sweep(n, step, 150, 10))
-    suite.add(static_n_sweep(n, step, 50, 10))
-    suite.add(static_n_sweep(n, step, 15, 10))
-    suite.add(static_n_sweep(n, step, 10, 5))
-    suite.add(static_n_sweep(n, step, 4, 2))
-    suite.add(static_n_sweep(n, step, 9, 3))
+    # suite.add(static_n_sweep(n, step, 500, 10))
+    # suite.add(static_n_sweep(n, step, 150, 10))
+    # suite.add(static_n_sweep(n, step, 50, 10))
+    # suite.add(static_n_sweep(n, step, 15, 10))
+    # suite.add(static_n_sweep(n, step, 10, 5))
+    # suite.add(static_n_sweep(n, step, 4, 2))
+    # suite.add(static_n_sweep(n, step, 9, 3))
     suite.add(static_n_sweep(n, step, 5, 2))
-    suite.add(static_n_sweep(n, step, 3, 1))
+    # suite.add(static_n_sweep(n, step, 3, 1))
     suite.add(static_n_sweep(n, step, 1, 1))
 
 # plot_all_n_sweep(100_000, 10000, 'n_sweeping100k')
-plot_all_n_sweep(4000, 100, 'n_sweeping4k')
+plot_all_n_sweep(400, 100, 'n_sweeping4k')

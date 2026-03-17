@@ -3,6 +3,8 @@ from dataclasses import replace
 from cliUtility import *
 from DataTypes import *
 from main import ExperimentGroup, format_datasize, format_name, ExperimentSuite, make_log_sweep
+import numpy as np
+
 
 '''
 experiments is a dict of {str: ExperimentGroup}. ALlows for many unrelated experiments to run from 1 file
@@ -45,6 +47,12 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
         for g in gap_sizes:
             # for ni in range(1, max_ni+1):
                 ni = 5
+            
+                gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 500_000)]
+                print(gap_sequence)
+                gap_sequence2 = [(g, g*2)] * (ni-2) + [(g**2, g**2 + 500_000)]
+                print(gap_sequence2)
+
                 experiment = replace(
                     template,
                     dataset_size             = n,
@@ -52,14 +60,9 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
                     uncertain_ratio          = 0.0, 
                     independent_variable     = 'gap_size_range',
                     interval_size_range      = (1, 100_000),
-                    # start_interval_range     = (1, 5),
-                    # start_interval_range     = (1, 100),
-                    # start_interval_range     = (1, 1_000),
                     start_interval_range     = (1, 10_000),
-                    # start_interval_range     = (1, 50_000),
-                    # start_interval_range     = (1, 100_000),
-                    # gap_size_range           = (g, 2 * g),  # fix the gap size
-                    gap_size_range           = (g, g + g),  # fix the gap size
+                    # gap_size_range           = (g, g + g),  # fix the gap size
+                    gap_size_sequence        = gap_sequence,
                     interval_width_range     = (5, 6),
                     num_intervals            = ni,
                     reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
@@ -74,7 +77,8 @@ def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
     if suite_name not in experiments:
         experiments[suite_name] = ExperimentSuite(suite_name)
     
-    gap_sizes = [5, 10, 50, 500, 1000, 6000, 10000]
+    # gap_sizes = [5, 10, 50, 500, 1000, 6000, 10000]
+    gap_sizes = [2, 5, 10, 25, 35, 50]
     # red_params = [(15, 10), (10, 5), (4, 2), (9, 3), (5, 2), (1, 1), (3,1)]
 
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 250, 1000))
