@@ -445,7 +445,6 @@ class ExperimentRunner:
             # find next gap if not last
             if i < num_intervals - 1:
                 if experiment.gap_size_sequence is not None:
-                    print('oyoyoyoyoyo')
                     idx = min(i, len(experiment.gap_size_sequence) - 1)
                     val = experiment.gap_size_sequence[idx]
                     # tuple = sample randomly in range, int = fixed gap

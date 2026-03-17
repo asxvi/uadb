@@ -84,8 +84,6 @@ def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 150, 10, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 50, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 10, 1000))
-
-
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 15, 10, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 10, 5, 1000))
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 4, 2, 1000))

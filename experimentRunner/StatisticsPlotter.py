@@ -77,7 +77,7 @@ class StatisticsPlotter:
         ax.set_ylabel('Reduce To Size', fontsize=12)
         
         plt.tight_layout()
-        outfile = f'heatmap{self.master_seed}'
+        outfile = f'red_vs_time_heatmap_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -113,21 +113,18 @@ class StatisticsPlotter:
         ax1.set_ylabel('Time (ms)')
         ax1.set_title(f'Time vs {indep_variable} by Reduction Parameters')
         ax1.grid(True, alpha=0.3)
-        ax1.legend(title='Reduce Params', loc='upper left')
-        # ax1.xaxis.set_ticks(x_labels)
-        # ax1.set_xticklabels(x_labels, rotation=45, ha='right')
         ax1.tick_params(axis='x', rotation=45)
+        ax1.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
 
         # COVERAGE axis labels
         ax2.set_ylabel('Coverage')
         ax2.set_xlabel(indep_variable)
         ax2.set_title(f'Coverage vs {indep_variable} by Reduction Parameters')
         ax2.grid(True, alpha=0.3)
-        ax2.legend(title='Reduce Params', loc='upper left')
         ax2.tick_params(axis='x', rotation=45)
 
         plt.tight_layout()
-        outfile = f'time_accuracy_sd{self.master_seed}'
+        outfile = f'gap_vs_time_coverage_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -189,30 +186,36 @@ class StatisticsPlotter:
         axes[0][0].set_ylabel('Time (ms)')
         axes[1][0].set_ylabel('Coverage (smaller=better)')
         # axes[2][0].set_ylabel('Distance (smaller=bettwe)')
-        
+        # handles, labels = axes[0][0][-1].get_legend_handles_labels()
+        # fig.legend(handles, labels, title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+
         plt.tight_layout()
-        outfile = f'distance_vs_NI_and_red{self.master_seed}'
+        outfile = f'distance_vs_NI_and_red_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
         return outpath
     
     def plot_convergence_vs_n(self, df: pd.DataFrame) -> str:
-        triggers = df['resizeTrigger'].unique()
+        redParams = sorted(df['reduce_triggerSz_sizeLim_tuple'].unique())
+        n_redParams = len(redParams)
+    
         fig, (ax) = plt.subplots(1, 1, figsize=(12, 5))
         fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
         
-        for trigger in triggers:
-            subdf = df[df['resizeTrigger'] == trigger]
-            ax.plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=f'trigger={trigger}')
+        # for i, (triggerSz, szLimit) in enumerate(redParams):
+        for i, redParamTuple in enumerate(redParams):
+            subdf = df[df['reduce_triggerSz_sizeLim_tuple'] == redParamTuple]
+            ax.plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=f'{redParamTuple}')
         
         ax.set_xlabel('Dataset Size')
         ax.set_ylabel('Interval Count')
         ax.set_title('Convergence for different triggers')
-        ax.legend()
-        ax.grid(True)
+        ax.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
         
+        ax.grid(True)
         plt.tight_layout()
+        # plt.show()
         outfile = f'convergence_vs_n_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
@@ -223,7 +226,6 @@ class StatisticsPlotter:
         '''find when certain gap size ceonverge at what N '''
 
         iv = self.iv
-        print(iv)
         if iv != 'gap_size' and iv != 'gap_size_range':
             return
 
@@ -265,10 +267,10 @@ class StatisticsPlotter:
             ax.set_title(f"Gap={gap}")
             ax.grid(True)
         
-        axes[0].legend(title="(trigger, reduce_to)")
+        axes[0].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
         plt.tight_layout()
         # plt.show()
-        outfile = f'converge_vs_gap_{self.master_seed}'
+        outfile = f'convergence_vs_gap_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -285,7 +287,8 @@ class StatisticsPlotter:
     
         if n_gaps == 1:
             axes = [axes]
-    
+
+        # group by reduciton params
         for i, gap in enumerate(gaps):
             ax = axes[i]
             gap_df = df[df['gap_size_range_tuple'] == gap]
@@ -294,12 +297,11 @@ class StatisticsPlotter:
                 time=('sum_time_mean', 'mean'),
                 result_size=('result_size_mean', 'mean'),
             ).reset_index()
-    
+
+            # scatter time vs result size with label on red params, and small annot on red param
             for _, row in grouped.iterrows():
-                ax.scatter(row['time'], row['result_size'], zorder=3)
-                ax.annotate(str(row[self.REDUCE_PARAM_NAME]),
-                            (row['time'], row['result_size']),
-                            textcoords="offset points", xytext=(5, 5), fontsize=7)
+                ax.scatter(row['time'], row['result_size'], zorder=3, label=str(row[self.REDUCE_PARAM_NAME]))
+                ax.annotate(str(row[self.REDUCE_PARAM_NAME]), (row['time'], row['result_size']), textcoords="offset points", xytext=(5, 5), fontsize=7)
     
             ax.set_title(f'gap={gap}')
             ax.set_xlabel('Avg Time (ms)')
@@ -309,7 +311,7 @@ class StatisticsPlotter:
         fig.suptitle('Time vs Result Size by Gap Size\n(bottom-left = ideal)', y=1.02)
     
         plt.tight_layout()
-        outfile = f'time_vs_result_size_{self.master_seed}'
+        outfile = f'gap_vs_time_vs_result_size_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()

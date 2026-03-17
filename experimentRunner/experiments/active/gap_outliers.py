@@ -48,10 +48,7 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
             # for ni in range(1, max_ni+1):
                 ni = 5
             
-                gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 500_000)]
-                print(gap_sequence)
-                gap_sequence2 = [(g, g*2)] * (ni-2) + [(g**2, g**2 + 500_000)]
-                print(gap_sequence2)
+                gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 300_000)]
 
                 experiment = replace(
                     template,
@@ -72,15 +69,13 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
         
     return group
 
-def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
+def plot_ni_gap_sweep(max_ni: int, n_list: list, gap_sizes:list, suite_name: str = None):
     suite_name = suite_name if suite_name is not None else f'ni_gap_sweeping{format_datasize(n_list[-1])}'
     if suite_name not in experiments:
         experiments[suite_name] = ExperimentSuite(suite_name)
     
-    # gap_sizes = [5, 10, 50, 500, 1000, 6000, 10000]
-    gap_sizes = [2, 5, 10, 25, 35, 50]
-    # red_params = [(15, 10), (10, 5), (4, 2), (9, 3), (5, 2), (1, 1), (3,1)]
-
+    # red_params = [(15, 10), (10, 5), (4, 2), (9, 3), (5, 2), (1, 1), (3,1)
+    
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 250, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 100, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 10, 1000))
@@ -97,9 +92,10 @@ def plot_ni_gap_sweep(max_ni: int, n_list: list, suite_name: str = None):
     # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 5, 2, 1000))
     experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 3, 1, 1000))
 
-n_list = make_log_sweep(1, 4000, 20)
-print(len(n_list))
-plot_ni_gap_sweep(5, n_list)
+n_list = make_log_sweep(1, 2000, 20)
+gap_sizes = [2, 5, 10, 25, 35, 50]
+plot_ni_gap_sweep(5, n_list, gap_sizes)
+
 
 # bigger gaps
 # diff start points [gap, 10*gap, ]
