@@ -1,7 +1,6 @@
 #include "postgres.h"
 #include <stdlib.h>
 #include <stdio.h>
-// #include "arithmetic.h"
 #include "logicalOperators.h"
 #include "prune.h"
 
@@ -9,7 +8,7 @@
 #define free pfree
 
 // Handles the 3 pruning cases for LT in each direction false=left, true=right
-Int4Range prune_lt_internal(Int4Range a, Int4Range b, bool direction) {
+Int4Range prune_lt_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
     
@@ -57,7 +56,7 @@ Int4Range prune_lt_internal(Int4Range a, Int4Range b, bool direction) {
 }
 
 // Handles the 3 pruning cases for GT in each direction false=left, true=right
-Int4Range prune_gt_internal(Int4Range a, Int4Range b, bool direction) {
+Int4Range prune_gt_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
 
@@ -100,8 +99,8 @@ Int4Range prune_gt_internal(Int4Range a, Int4Range b, bool direction) {
     return result;
 }
 
-// Handles the 3 pruning cases for LT in each direction false=left, true=right
-Int4Range prune_lte_internal(Int4Range a, Int4Range b, bool direction) {
+// Handles the 3 pruning cases for LTE in each direction false=left, true=right
+Int4Range prune_lte_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
     
@@ -148,8 +147,8 @@ Int4Range prune_lte_internal(Int4Range a, Int4Range b, bool direction) {
     return result;
 }
 
-// Handles the 3 pruning cases for GT in each direction false=left, true=right
-Int4Range prune_gte_internal(Int4Range a, Int4Range b, bool direction) {
+// Handles the 3 pruning cases for GTE in each direction false=left, true=right
+Int4Range prune_gte_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
 
@@ -189,5 +188,22 @@ Int4Range prune_gte_internal(Int4Range a, Int4Range b, bool direction) {
         elog(ERROR, "Error, input a boolean as the third parameter; (false=left, true=right)");
     }
 
+    return result;
+}
+
+// all points of intersection. both sides shrink
+Int4Range prune_eq_internal_range(Int4Range a, Int4Range b) {
+    Int4Range result;
+    result.isNull = false;
+
+    result.lower = max2(a.lower, b.lower);
+    result.upper = min2(a.upper, b.upper);
+
+    if (!validRange(result)) {
+        result.isNull = true;
+        result.lower = -1;
+        result.upper = -1;
+        return result;
+    }
     return result;
 }

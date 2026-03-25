@@ -47,8 +47,15 @@ PG_FUNCTION_INFO_V1(set_sort);
 PG_FUNCTION_INFO_V1(set_normalize);
 PG_FUNCTION_INFO_V1(set_reduce_size);
 
+/*(Prune Functions)*/
+PG_FUNCTION_INFO_V1(prune_lt_range);
+PG_FUNCTION_INFO_V1(prune_gt_range);
+PG_FUNCTION_INFO_V1(prune_lte_range);
+PG_FUNCTION_INFO_V1(prune_gte_range);
+PG_FUNCTION_INFO_V1(prune_eq_range);
+
 /*(Aggregate Functions)*/
-//sum
+//          sum
 PG_FUNCTION_INFO_V1(combine_range_mult_sum);
 PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);
 PG_FUNCTION_INFO_V1(combine_set_mult_sum);
@@ -59,7 +66,7 @@ PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTest);
 PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTestNN);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfuncTest);
 
-// min/max
+//          min/max
 PG_FUNCTION_INFO_V1(combine_range_mult_min);
 PG_FUNCTION_INFO_V1(combine_range_mult_max);
 PG_FUNCTION_INFO_V1(agg_min_range_transfunc);
@@ -70,10 +77,10 @@ PG_FUNCTION_INFO_V1(agg_min_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_max_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_min_max_set_finalfunc);
 
-// count -- assumes mult is RangeType.. easy fix if not
+//          count -- assumes mult is RangeType.. easy fix if not
 PG_FUNCTION_INFO_V1(agg_count_transfunc);
 
-// avg- uses agg_sum_set_transfunc as transition function
+//          avg- uses agg_sum_set_transfunc as transition function
 PG_FUNCTION_INFO_V1(agg_avg_range_transfunc);
 PG_FUNCTION_INFO_V1(agg_avg_range_finalfunc);
 PG_FUNCTION_INFO_V1(agg_avg_set_transfunc);
@@ -82,6 +89,9 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
 
 // easy change for future implementation. currently only affects lift funciton
 #define PRIMARY_DATA_TYPE "int4range"
+
+
+/*(Defined MACROS)*/
 
 /// check for NULLS parameters. Different from empty range check
 // returns the parameter that is not null
@@ -164,8 +174,32 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     PG_RETURN_BOOL((bool)rv);                                       \
 }
 
-/*Function declarations*/
+/* prune/ cuts away impossible values based on logical condition (lt, gt, lte, gte, eq)*/
+#define DEFINE_PRUNE_RANGE_FUNC(func_name, internal_func)           \
+Datum func_name(PG_FUNCTION_ARGS)                                   \
+{                                                                   \
+    RangeType      *a_range, *b_range, *output;                     \
+    bool            direction;                                      \
+    TypeCacheEntry *typcache;                                       \
+    Int4Range       a, b, result;                                   \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))     \
+        PG_RETURN_NULL();                                           \
+    a_range   = PG_GETARG_RANGE_P(0);                               \
+    b_range   = PG_GETARG_RANGE_P(1);                               \
+    direction = PG_GETARG_BOOL(2);                                  \
+    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);            \
+    a = deserialize_RangeType(a_range, typcache);                   \
+    b = deserialize_RangeType(b_range, typcache);                   \
+    result = internal_func(a, b, direction);                        \
+    if (result.isNull)                                              \
+        PG_RETURN_NULL();                                           \
+    output = serialize_RangeType(result, typcache);                 \
+    PG_RETURN_RANGE_P(output);                                      \
+}
 
+
+
+/*Function declarations*/
 RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
 ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
@@ -206,6 +240,41 @@ DEFINE_SET_LOGICAL_FUNC(set_gte, set_greater_than_equal)
 DEFINE_SET_LOGICAL_FUNC(set_lt, set_less_than)
 DEFINE_SET_LOGICAL_FUNC(set_lte, set_less_than_equal)
 DEFINE_SET_LOGICAL_FUNC(set_eq, set_equal_internal)
+
+
+/////////////////////
+ // Prune Functions
+/////////////////////
+DEFINE_PRUNE_RANGE_FUNC(prune_lt_range, prune_lt_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_gt_range, prune_gt_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_lte_range, prune_lte_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_gte_range, prune_gte_internal_range)
+
+Datum
+prune_eq_range(PG_FUNCTION_ARGS) {
+    RangeType      *a_range, *b_range, *output;
+    TypeCacheEntry *typcache;
+    Int4Range       a, b, result;
+    
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {
+        PG_RETURN_NULL();
+    }
+    
+    // deserialize, operate, serialize
+    a_range   = PG_GETARG_RANGE_P(0);
+    b_range   = PG_GETARG_RANGE_P(1);
+    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);
+    a = deserialize_RangeType(a_range, typcache);
+    b = deserialize_RangeType(b_range, typcache);
+    result = prune_eq_internal_range(a, b);
+    
+    if (result.isNull) {
+        PG_RETURN_NULL();
+    }
+    output = serialize_RangeType(result, typcache);
+    
+    PG_RETURN_RANGE_P(output);
+}
 
 /////////////////////
  // Helper Functions
@@ -1424,6 +1493,8 @@ agg_avg_range_finalfunc(PG_FUNCTION_ARGS)
     
     PG_RETURN_RANGE_P(result);
 }
+
+// FIXME. do not remember what was wrong here. i think set division trips me up because of the rounding
 /////////////////
 //// set avg ////
 /////////////////
@@ -1703,30 +1774,11 @@ agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
 
     normResult = normalize(state->ranges);
 
-    // elog(INFO, "FINAL span = %ld, count = %ld",
-    //  totalSpan(normResult),
-    //  normResult.count);
-
     // attemp to track when collapse occurs and min width/ num ranges
     currentSpan  = totalSpan(normResult);
     currentCount = normResult.count;
-    // if (state->minEffectiveIntervalCount == 0) {
-    //     state->minEffectiveIntervalCount = currentCount;
-    //     state->convergedToTotSize = currentSpan;
-    // }
-    // else if (currentCount < state->minEffectiveIntervalCount) {
-    //     state->minEffectiveIntervalCount = currentCount;
-    //     state->convergedToTotSize = currentSpan;
-    // }
-    // else if (currentCount == state->minEffectiveIntervalCount &&
-    //         currentSpan < state->convergedToTotSize) {
-    //     state->convergedToTotSize = currentSpan;
-    // }
     state->minEffectiveIntervalCount = currentCount;
     state->convergedToTotSize = currentSpan;
-    // elog(INFO, "FINAL span = %ld, count = %ld",
-    //  totalSpan(normResult),
-    //  normResult.count);
 
     arr = serialize_ArrayType(normResult, typcache);
     values[0] = PointerGetDatum(arr);
@@ -1862,72 +1914,6 @@ agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
 }
 
 
-
-
-
-
-
-
-
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-// #define DEFINE_PRUNE_BOOL_FUNC(func_name, internal_func)            \
-// Datum func_name(PG_FUNCTION_ARGS)                                   \
-// {                                                                   \
-//     RangeType      *a_range, *b_range;                              \
-//     bool            direction;                                      \
-//     TypeCacheEntry *typcache;                                       \
-//     Int4Range       a, b, result;                                   \
-//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))     \
-//         PG_RETURN_NULL();                                           \
-//     a_range   = PG_GETARG_RANGE_P(0);                               \
-//     b_range   = PG_GETARG_RANGE_P(1);                               \
-//     direction = PG_GETARG_BOOL(2);                                  \
-//     typcache  = lookup_type_cache(a_range->rangetypid,              \
-//                                   TYPECACHE_RANGE_INFO);            \
-//     a = deserialize_RangeType(a_range, typcache);                   \
-//     b = deserialize_RangeType(b_range, typcache);                   \
-//     result = internal_func(a, b, direction);                        \
-//     if (result.isNull)                                              \
-//         PG_RETURN_BOOL(false);                                      \
-//     PG_RETURN_BOOL(true);                                           \
-// }
-*/
-
-#define DEFINE_PRUNE_RANGE_FUNC(func_name, internal_func)           \
-Datum func_name(PG_FUNCTION_ARGS)                                   \
-{                                                                   \
-    RangeType      *a_range, *b_range, *output;                     \
-    bool            direction;                                      \
-    TypeCacheEntry *typcache;                                       \
-    Int4Range       a, b, result;                                   \
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))     \
-        PG_RETURN_NULL();                                           \
-    a_range   = PG_GETARG_RANGE_P(0);                               \
-    b_range   = PG_GETARG_RANGE_P(1);                               \
-    direction = PG_GETARG_BOOL(2);                                  \
-    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);            \
-    a = deserialize_RangeType(a_range, typcache);                   \
-    b = deserialize_RangeType(b_range, typcache);                   \
-    result = internal_func(a, b, direction);                        \
-    if (result.isNull)                                              \
-        PG_RETURN_NULL();                                           \
-    output = serialize_RangeType(result, typcache);                 \
-    PG_RETURN_RANGE_P(output);                                      \
-}
-
-PG_FUNCTION_INFO_V1(prune_lt_range);
-PG_FUNCTION_INFO_V1(prune_gt_range);
-PG_FUNCTION_INFO_V1(prune_lte_range);
-PG_FUNCTION_INFO_V1(prune_gte_range);
-
-DEFINE_PRUNE_RANGE_FUNC(prune_lt_range, prune_lt_internal)
-DEFINE_PRUNE_RANGE_FUNC(prune_gt_range, prune_gt_internal)
-DEFINE_PRUNE_RANGE_FUNC(prune_lte_range, prune_lte_internal)
-DEFINE_PRUNE_RANGE_FUNC(prune_gte_range, prune_gte_internal)

@@ -3,9 +3,10 @@
 
 #include "helperFunctions.h"
 
-Int4Range prune_lt_internal(Int4Range a, Int4Range b, bool direction);
-Int4Range prune_gt_internal(Int4Range a, Int4Range b, bool direction);
-Int4Range prune_lte_internal(Int4Range a, Int4Range b, bool direction);
-Int4Range prune_gte_internal(Int4Range a, Int4Range b, bool direction);
-// Int4Range prune_eq_internal(Int4Range a, Int4Range b, char direction);
+Int4Range prune_lt_internal_range(Int4Range a, Int4Range b, bool direction);
+Int4Range prune_gt_internal_range(Int4Range a, Int4Range b, bool direction);
+Int4Range prune_lte_internal_range(Int4Range a, Int4Range b, bool direction);
+Int4Range prune_gte_internal_range(Int4Range a, Int4Range b, bool direction);
+Int4Range prune_eq_internal_range(Int4Range a, Int4Range b);
+
 #endif

@@ -373,3 +373,8 @@ CREATE FUNCTION prune_gte_range(a int4range, b int4range, direction boolean)
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'prune_gte_range'
 LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_eq_range(a int4range, b int4range) 
+RETURNS int4range
+AS 'MODULE_PATHNAME', 'prune_eq_range'
+LANGUAGE C STRICT;

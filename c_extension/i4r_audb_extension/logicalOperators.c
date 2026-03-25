@@ -45,12 +45,10 @@ int range_less_than_equal(Int4Range a, Int4Range b){
     return -1;
 }
 
+// determines whether full equality (a=b=c=d), partial equality (overlap), or no equality (disjoint)
 int range_equal_internal(Int4Range a, Int4Range b) {
-    if (a.lower == (a.upper-1) && 
-        (a.upper-1) == (b.lower) && 
-        (b.lower) == (b.upper-1)) {
-        
-            return 1;
+    if (a.lower == (a.upper-1) && (a.upper-1) == (b.lower) && (b.lower) == (b.upper-1)) {        
+        return 1;
     }
     else if (overlap(a, b)) {
         return -1;  // NULL (uncertain)
