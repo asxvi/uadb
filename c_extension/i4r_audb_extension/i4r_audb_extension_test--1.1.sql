@@ -1,4 +1,5 @@
-
+drop extension i4r_audb_extension;
+create extension i4r_audb_extension;
 
 -- ===================================
 -- Test1: Range Arithmetic
@@ -353,9 +354,31 @@ INSERT INTO tX_superNarrow3 (val, mult) VALUES
     (array[int4range(1,66), int4range(100,150), int4range(200,500)], int4range(1,4));
 
 
+DROP TABLE IF EXISTS tX_prune_basic;
+CREATE TEMP TABLE tX_prune_basic (
+    id int GENERATED ALWAYS AS IDENTITY,
+    a int4range[],
+    b int4range[],
+    mult int4range
+);
+INSERT INTO tX_prune_basic (a, b, mult) VALUES
+    (array[int4range(1,2), int4range(10,12)], array[int4range(8,14)], int4range(1,4)),
+    (array[int4range(20,25), int4range(40,42)], array[int4range(18,100)], int4range(1,4));
+    -- (array[int4range(100,200), int4range(10,12)], array[int4range(8,14)], int4range(1,4)),
 
-
-
+DROP TABLE IF EXISTS tX_r_prune_basic;
+CREATE TEMP TABLE tX_r_prune_basic (
+    id int GENERATED ALWAYS AS IDENTITY,
+    a int4range,
+    b int4range,
+    mult int4range
+);
+INSERT INTO tX_r_prune_basic (a, b, mult) VALUES
+    (int4range(1,12), int4range(8,14), int4range(1,4)),
+    (int4range(2,25), int4range(18,100), int4range(1,4)),
+    (int4range(1,2), int4range(100,200), int4range(1,4)),
+    (int4range(100,200), int4range(1,2), int4range(1,4));
+    
 -- show failures
 -- \echo Test1: Range Arithmetic
 -- SELECT 'Test1: Range Arithmetic' as Test;
@@ -398,3 +421,15 @@ INSERT INTO tX_superNarrow3 (val, mult) VALUES
 -- SELECT *, 't7_s_aggregates' as source
 -- FROM t7_s_aggregates
 -- WHERE actual IS DISTINCT FROM expected;
+
+
+
+
+-- say we are working with sets of ranges:
+
+-- A  | B | multiplicity
+-- {(1,2), (10,12)} | {(8,14)} | (1,1)
+
+-- select a from r where a =b;
+
+-- 1) translate select into using our 

@@ -464,8 +464,6 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   return filteredVals;
 }
 
-
-
 // testing agg
 Int4RangeSet
 interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {

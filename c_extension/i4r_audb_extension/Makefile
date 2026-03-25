@@ -8,6 +8,7 @@ OBJS = 	\
 	helperFunctions.o \
 	serialization.o	\
 	logicalOperators.o	\
+	prune.o \
 	i4r_audb_extension.o
 
 # using postgres@16 for local testing

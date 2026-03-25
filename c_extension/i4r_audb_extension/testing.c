@@ -1,6 +1,7 @@
 // #include <string.h>
 // #include <stdlib.h>
 // #include <stdio.h>
+// #include <stdbool.h>
 // #include "helperFunctions.h" 
 // #include "limits.h"
 
@@ -27,6 +28,13 @@
 // bool overlap(Int4Range a, Int4Range b){
 //   return a.lower < b.upper && b.lower < a.upper;
 // }
+
+// typedef struct{ 
+//     int lower; // inclusive
+//     int upper; // exclusive
+//     bool isNull;
+// } Int4Range;
+
 
 // void printRange(Int4Range a){
 //   if (a.isNull){
@@ -430,17 +438,81 @@
 //     return set1;
 // }
 
+// #define min2(x, y) (((x) <= (y)) ? (x) : (y))
+// #define max2(x, y) (((x) >= (y)) ? (x) : (y))
 
+// int range_less_than(Int4Range a, Int4Range b){
+//     if (a.lower > (b.upper-1)) {
+//         return 0;
+//     }
+//     else if ((a.upper-1) < b.lower) {
+//         return 1;
+//     }
+//     return -1;
+// }
 
-// #define PRIMARY_DATA_TYPE "int4range"
+// Int4Range prune_lt_internal(Int4Range a, Int4Range b, char direction) {
+//     Int4Range result;
+//     result.isNull = false;
+    
+//     // 3 cases
+//     // A is stricly less than B, 
+//     // A is stricly greater than B,
+//     // They overlap
+//     if (direction == 'l') {
+//         // strictly less than. Just return left side == A
+//         if (range_less_than(a, b) == 1) {
+//             return a;
+//         }
+//         // A is not LT B. result is NULL
+//         else if (range_less_than(a,b) == 0) {
+//             result.isNull = true;
+//             return result;
+//         }
+//         // otherwise return A pruned on UB by min
+//         result.lower = a.lower;
+//         // result.upper = b.lower;
+//         result.upper = min2(a.upper, b.lower);
+//         printf("r.lower=%d r.upper=%d\n", result.lower, result.upper);
+//     } 
+//     else if (direction == 'r') {
+//         // strictly less than. Just return right side == B
+//         if (range_less_than(a, b) == 1) {
+//             return b;
+//         }
+//         // A is not LT B. result is NULL
+//         else if (range_less_than(a,b) == 0) {
+//             result.isNull = true;
+//             return result;
+//         }
+//         // otherwise return B pruned on LB by A
+//         // result.lower = a.upper;
+//         result.lower = max2(a.upper, b.lower);
+//         result.upper = b.upper;
+
+//         // if(valid)
+//         printf("r.lower=%d r.upper=%d\n", result.lower, result.upper);
+//     }
+
+//     return result;
+// }
+
+// // #define PRIMARY_DATA_TYPE "int4range"
 
 // int main(){  
-//   Int4Range a = {1,5};
-//   Int4Range b = {9,12};
-//   Int4Range c = {18,29};
-//   Int4Range d = {4,13};
-//   Int4Range e = {16,20};
-//   Int4Range f = {6,11};
+//   Int4Range a = {1,12};
+//   Int4Range b = {8,14};
+//   Int4Range c = {2,25};
+//   Int4Range d = {18,100};
+// //   Int4Range e = {16,20};
+// //   Int4Range f = {6,11};
+
+//     char dir = 'r';
+//     Int4Range r1 = prune_lt_internal(a, b, dir);
+//     Int4Range r2 = prune_lt_internal(c, d, dir);
+    
+//     printRange(r1);
+//     printRange(r2);
 
 //   Int4Range n;
 //   n.isNull = true;

@@ -15,6 +15,7 @@
 #include "logicalOperators.h"   // logic for logical ops
 #include "helperFunctions.h"    // logic for helpers
 #include "serialization.h"      // serial and deserial helpers
+#include "prune.h"              // prune stuff
 
 PG_MODULE_MAGIC;
 
@@ -389,7 +390,7 @@ arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callba
     
     // safety check. Should not be necessary bc postgres enforces this already
     if(!validRange(range1) || !validRange(range2)) {
-        return make_empty_range(typcache);;
+        return make_empty_range(typcache);
     }
 
     // implemented C function
@@ -1534,7 +1535,7 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
     ArrayType *currSet;
     TypeCacheEntry *typcache;
     Int4RangeSet inputSet, combined, normalized, newState;
-    long currentSpan, currentCount;
+    // long currentSpan, currentCount;
     
     if (!AggCheckCallContext(fcinfo, &aggcontext))
         elog(ERROR, "agg_sum_set_transfunc called in non-aggregate context");
@@ -1630,8 +1631,8 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
         state->ranges = newState;
         
         // attemp to track when collapse occurs and min width/ num ranges
-        currentSpan  = totalSpan(newState);
-        currentCount = newState.count;
+        // currentSpan  = totalSpan(newState);
+        // currentCount = newState.count;
         
         
         // elog(INFO, "FINAL span = %ld, count = %ld",
@@ -1859,3 +1860,70 @@ agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
     
     PG_RETURN_POINTER(state);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+// #define DEFINE_PRUNE_BOOL_FUNC(func_name, internal_func)            \
+// Datum func_name(PG_FUNCTION_ARGS)                                   \
+// {                                                                   \
+//     RangeType      *a_range, *b_range;                              \
+//     bool            direction;                                      \
+//     TypeCacheEntry *typcache;                                       \
+//     Int4Range       a, b, result;                                   \
+//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))     \
+//         PG_RETURN_NULL();                                           \
+//     a_range   = PG_GETARG_RANGE_P(0);                               \
+//     b_range   = PG_GETARG_RANGE_P(1);                               \
+//     direction = PG_GETARG_BOOL(2);                                  \
+//     typcache  = lookup_type_cache(a_range->rangetypid,              \
+//                                   TYPECACHE_RANGE_INFO);            \
+//     a = deserialize_RangeType(a_range, typcache);                   \
+//     b = deserialize_RangeType(b_range, typcache);                   \
+//     result = internal_func(a, b, direction);                        \
+//     if (result.isNull)                                              \
+//         PG_RETURN_BOOL(false);                                      \
+//     PG_RETURN_BOOL(true);                                           \
+// }
+*/
+
+#define DEFINE_PRUNE_RANGE_FUNC(func_name, internal_func)           \
+Datum func_name(PG_FUNCTION_ARGS)                                   \
+{                                                                   \
+    RangeType      *a_range, *b_range, *output;                     \
+    bool            direction;                                      \
+    TypeCacheEntry *typcache;                                       \
+    Int4Range       a, b, result;                                   \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))     \
+        PG_RETURN_NULL();                                           \
+    a_range   = PG_GETARG_RANGE_P(0);                               \
+    b_range   = PG_GETARG_RANGE_P(1);                               \
+    direction = PG_GETARG_BOOL(2);                                  \
+    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);            \
+    a = deserialize_RangeType(a_range, typcache);                   \
+    b = deserialize_RangeType(b_range, typcache);                   \
+    result = internal_func(a, b, direction);                        \
+    if (result.isNull)                                              \
+        PG_RETURN_NULL();                                           \
+    output = serialize_RangeType(result, typcache);                 \
+    PG_RETURN_RANGE_P(output);                                      \
+}
+
+PG_FUNCTION_INFO_V1(prune_lt_range);
+PG_FUNCTION_INFO_V1(prune_gt_range);
+
+DEFINE_PRUNE_RANGE_FUNC(prune_lt_range, prune_lt_internal)
+DEFINE_PRUNE_RANGE_FUNC(prune_gt_range, prune_gt_internal)

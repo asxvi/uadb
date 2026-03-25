@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#define min2(a, b) (((a) <= (b)) ? (a) : (b))
-#define max2(a, b) (((a) >= (b)) ? (a) : (b))
+#define min2(x, y) (((x) <= (y)) ? (x) : (y))
+#define max2(x, y) (((x) >= (y)) ? (x) : (y))
 
 // [Inclusive LB, Exclusive UB)
 typedef struct{ 
