@@ -36,7 +36,8 @@ class StatisticsPlotter:
         self.plot_3_row_red_vs_TimeNCover(df)
         self.plot_convergence_vs_n(df)
         self.plot_convergence_vs_gap(df)
-        self.plot_time_vs_result_size(df)
+        self.plot_gap_vs_time_vs_result_size(df)
+        self.plot_gap_vs_time_vs_underreduction(df)
         
         print("Results saved in: ", self.resultFilepath)
 
@@ -114,7 +115,7 @@ class StatisticsPlotter:
         ax1.set_title(f'Time vs {indep_variable} by Reduction Parameters')
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
-        ax1.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+        # ax1.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
 
         # COVERAGE axis labels
         ax2.set_ylabel('Coverage')
@@ -122,6 +123,7 @@ class StatisticsPlotter:
         ax2.set_title(f'Coverage vs {indep_variable} by Reduction Parameters')
         ax2.grid(True, alpha=0.3)
         ax2.tick_params(axis='x', rotation=45)
+        ax2.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
 
         plt.tight_layout()
         outfile = f'gap_vs_time_coverage_{self.master_seed}'
@@ -267,7 +269,7 @@ class StatisticsPlotter:
             ax.set_title(f"Gap={gap}")
             ax.grid(True)
         
-        axes[0].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+        axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
         plt.tight_layout()
         # plt.show()
         outfile = f'convergence_vs_gap_{self.master_seed}'
@@ -276,7 +278,7 @@ class StatisticsPlotter:
         plt.close()
         return outpath
 
-    def plot_time_vs_result_size(self, df: pd.DataFrame) -> str:
+    def plot_gap_vs_time_vs_result_size(self, df: pd.DataFrame) -> str:
         '''1 x n plot of time vs result_size per gap size, one point per reduction config'''
         
         gaps = sorted(df['gap_size_range_tuple'].unique())
@@ -306,12 +308,64 @@ class StatisticsPlotter:
             ax.set_title(f'gap={gap}')
             ax.set_xlabel('Avg Time (ms)')
             ax.grid(True, alpha=0.3)
-    
+
         axes[0].set_ylabel('Avg Result Size (# intervals)')
+        axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
         fig.suptitle('Time vs Result Size by Gap Size\n(bottom-left = ideal)', y=1.02)
-    
+
         plt.tight_layout()
         outfile = f'gap_vs_time_vs_result_size_{self.master_seed}'
+        outpath = f"{self.resultFilepath}/{outfile}"
+        plt.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close()
+        return outpath
+
+    def plot_gap_vs_time_vs_underreduction(self, df: pd.DataFrame) -> str:
+        '''1 x n plot of time vs result_size per gap size, one point per reduction config'''
+        
+        gaps = sorted(df['gap_size_range_tuple'].unique())
+        n_gaps = len(gaps)
+    
+        fig, axes = plt.subplots(1, n_gaps, figsize=(6 * n_gaps, 6), sharey=True)
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7)
+    
+        if n_gaps == 1:
+            axes = [axes]
+
+        # group by reduciton params
+        for i, gap in enumerate(gaps):
+            ax = axes[i]
+            gap_df = df[df['gap_size_range_tuple'] == gap]
+
+
+            grouped = gap_df.groupby(self.REDUCE_PARAM_NAME).agg(
+                time=('sum_time_mean', 'mean'),
+                result_size=('result_size_mean', 'mean'),
+                size_limit=('sizeLimit', 'first'),
+            ).reset_index()
+            
+            grouped['under_reduction'] = (grouped['size_limit'] - grouped['result_size']).clip(lower=0)
+            # grouped['score'] = grouped['under_reduction'] / (grouped['time'] + 1e-9)
+            grouped['under_reduction_score'] = grouped['under_reduction'] / grouped['size_limit']
+
+            # scatter time vs result size with label on red params, and small annot on red param
+            for _, row in grouped.iterrows():
+                ax.scatter(row['time'], row['under_reduction_score'], zorder=3, label=str(row[self.REDUCE_PARAM_NAME]))
+                ax.annotate(str(row[self.REDUCE_PARAM_NAME]), (row['time'], row['result_size']), textcoords="offset points", xytext=(5, 5), fontsize=7)
+    
+            ax.set_title(f'gap={gap}')
+            ax.set_xlabel('Avg Time (ms)')
+            # ax.invert_yaxis()
+            ax.grid(True, alpha=0.3)
+        axes[0].invert_yaxis()
+        # axes[0].set_ylabel('Avg Result Size (# intervals)')
+        axes[0].set_ylabel('Under Reduction (relative to size limit)')
+        axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+        fig.suptitle('Time vs Result Size by Gap Size\n(bottom-left = ideal)', y=1.02)
+
+        plt.tight_layout()
+        # plt.show()
+        outfile = f'underreduction_{self.master_seed}'
         outpath = f"{self.resultFilepath}/{outfile}"
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close()
@@ -362,6 +416,8 @@ class StatisticsPlotter:
                     f'width_mean={df['width_mean'].iloc[0]}, width_std={df['width_std'].iloc[0]})')
         elif dist == DistributionType.ZIPFIAN:
             return (f'zipfian(pos_a={df['pos_zipf_a'].iloc[0]}, width_a={df['width_zipf_a'].iloc[0]})')
+        elif dist == DistributionType.UNIFORM:
+            return (f'uniform')
         elif dist == DistributionType.CLUSTERED:
             return (f'clustered(pos_clusters={df['pos_n_clusters'].iloc[0]}, pos_spread={df['pos_cluster_spread'].iloc[0]}, '
                     f'width_clusters={df['width_n_clusters'].iloc[0]}, width_spread={df['width_cluster_spread'].iloc[0]})')

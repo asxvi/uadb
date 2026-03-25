@@ -11,10 +11,10 @@ persists in namespace of caller program
 '''
 
 # zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
-zipf = DistributionConfig()
-zipf.distribution = DistributionType.ZIPFIAN
-zipf.pos_zipf_a = 1.8
-zipf.width_zipf_a = 1.5
+# zipf = DistributionConfig()
+# zipf.distribution = DistributionType.ZIPFIAN
+# zipf.pos_zipf_a = 1.8
+# zipf.width_zipf_a = 1.5
 
 experiments = dict()
 
@@ -31,7 +31,7 @@ template = ExperimentSettings(
     gap_size_range=(0,100), 
     name= "temp",
     reduce_triggerSz_sizeLim=(10, 5),
-    distribution_config= zipf,
+    # distribution_config= zipf,
 )
 
 def static_n_sweep(max_n: int = 100_000, step: int = 10_000, trigger_size: int = 10, reduce_to_size: int = 5):
@@ -69,13 +69,13 @@ def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
     # suite.add(static_n_sweep(n, step, 500, 10))
     # suite.add(static_n_sweep(n, step, 150, 10))
     # suite.add(static_n_sweep(n, step, 50, 10))
-    # suite.add(static_n_sweep(n, step, 15, 10))
+    suite.add(static_n_sweep(n, step, 15, 10))
     # suite.add(static_n_sweep(n, step, 10, 5))
     # suite.add(static_n_sweep(n, step, 4, 2))
     # suite.add(static_n_sweep(n, step, 9, 3))
-    suite.add(static_n_sweep(n, step, 5, 2))
+    # suite.add(static_n_sweep(n, step, 5, 2))
     # suite.add(static_n_sweep(n, step, 3, 1))
-    suite.add(static_n_sweep(n, step, 1, 1))
+    # suite.add(static_n_sweep(n, step, 1, 1))
 
 # plot_all_n_sweep(100_000, 10000, 'n_sweeping100k')
 plot_all_n_sweep(400, 100, 'n_sweeping4k')

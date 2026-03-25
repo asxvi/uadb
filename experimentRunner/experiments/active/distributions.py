@@ -69,22 +69,24 @@ def plot_dist_gap_sweep(max_ni: int, n_list: list, gap_sizes:list, dist:Distribu
     
     # red_params = [(15, 10), (10, 5), (4, 2), (9, 3), (5, 2), (1, 1), (3,1)
     
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 500, 250, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 500, 100, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 500, 10, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 150, 100, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 150, 10, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 70, 50, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 70, 10, 1000))
-    # experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 15, 10, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 10, 5, 1000))
-    # experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 4, 2, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 9, 3, 1000))
-    # experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 5, 2, 1000))
-    experiments[suite_name].add(dist_gap_sweep(gap_sizes, max_ni, n_list, 3, 1, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 500, 250, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 500, 100, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 500, 10, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 150, 100, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 150, 10, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 70, 50, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 70, 10, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 15, 10, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 10, 5, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 4, 2, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 9, 3, 1000))
+    # experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 5, 2, 1000))
+    experiments[suite_name].add(dist_gap_sweep(dist, gap_sizes, max_ni, n_list, 3, 1, 1000))
 
 n_list = make_log_sweep(1, 2000, 20)
-gap_sizes = [2, 5, 10, 25, 35, 50]
+# gap_sizes = [2, 5, 10, 25, 35, 50]
+gap_sizes = [5, 50, 200, 1000, 5000]
+
 zipf = DistributionConfig(
     distribution=DistributionType.ZIPFIAN,
     pos_zipf_a=1.8,
@@ -92,9 +94,16 @@ zipf = DistributionConfig(
 )
 plot_dist_gap_sweep(5, n_list, gap_sizes, zipf, "dist_gap_sweep_zipf1.8w1.5")
 
-zipf = DistributionConfig(
+uniform = DistributionConfig(
     distribution=DistributionType.UNIFORM,
-    
-    width_zipf_a=1.5,
 )
-plot_dist_gap_sweep(5, n_list, gap_sizes, zipf, "dist_gap_sweep_zipf1.8w1.5")
+plot_dist_gap_sweep(5, n_list, gap_sizes, uniform, "dist_gap_sweep_uniform")
+
+normal = DistributionConfig(
+    distribution=DistributionType.NORMAL,
+    pos_mean = None,
+    pos_std = None,
+    width_mean = 100,
+    width_std = 25,
+)
+plot_dist_gap_sweep(5, n_list, gap_sizes, normal, "dist_gap_sweep_normal")

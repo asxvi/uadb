@@ -85,6 +85,7 @@ class ExperimentSettings:
     gap_size: int = None
     gap_size_range: tuple = None    
     gap_size_sequence: list = None  # sequence of gaps. allows for creating outlier ex. [5, 5, 5, 10000]
+    gap_seq_formula_str: str = None # exact formula of gap_size_sequence
     
     mode: str = None                # NOT USED YET what modes of test suite to execute
     save_ddl:bool = False           # store ddl code to make tables 
@@ -372,7 +373,7 @@ class ExperimentRunner:
             else:
                 mean = dist.pos_mean if dist.pos_mean is not None else (low + high) / 2
                 std  = dist.pos_std if dist.pos_std is not None else (high - low) / 6
-            return int(np.clip(random.normal(mean, std), low, high))
+            return int(np.clip(np.random.normal(mean, std), low, high))
         
         elif dist.distribution == DistributionType.ZIPFIAN:
             if isWidth:
@@ -689,6 +690,8 @@ class ExperimentRunner:
         max_times = extract('max_time')
         sum_times = extract('sum_time')
         sumtest_times = extract('sumtest_time')
+
+        sum_results = trial_results[0].get('sum_test_result')   # actual result
         reduce_calls = extract('reduce_calls')
         max_intervals = extract('max_interval_count')
         total_intervals = extract('total_interval_count')
@@ -733,6 +736,8 @@ class ExperimentRunner:
             'sumtest_time_std': np.std(sumtest_times) if sumtest_times else None,
             
             # reduction stats
+            'sum_results': sum_results if sum_results else None,
+            # 'sum_result_ranges': np.mean(sum_results) if sum_results else None,
             'reduce_calls_mean': np.mean(reduce_calls) if reduce_calls else None,
             'max_interval_count_mean': np.mean(max_intervals) if max_intervals else None,
             'total_interval_count_mean': np.mean(total_intervals) if total_intervals else None,
@@ -801,6 +806,20 @@ class ExperimentRunner:
                 file.write(';\n\n')
 
         print(f"  DDL saved: {ddl_path}")
+    
+    def __calculate_coverage(self, interval_set):
+        '''adds all values contained within every interval in set'''
+        cover = 0
+        for interval in interval_set:
+            cover += interval.upper - interval.lower
+        return cover
+
+    def __calculate_coverage_i4r(self, interval_set: RangeSetType):
+        '''i4r version: adds all values contained within every interval in set'''
+        cover = 0
+        for interval in interval_set.rset:
+            cover += interval.ub - interval.lb
+        return cover
     
 def generate_seed(in_seed=None):
     '''genrate the master seed of this programs run. (can be included in runner or settings class)'''
