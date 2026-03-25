@@ -385,6 +385,11 @@ AS 'MODULE_PATHNAME', 'prune_range_and'
 LANGUAGE C STRICT;
 
 CREATE FUNCTION prune_range_or(a int4range, b int4range) 
-RETURNS int4range
+RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_range_or'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_range_not(a int4range) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_range_not'
 LANGUAGE C STRICT;

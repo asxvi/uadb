@@ -217,11 +217,12 @@ Int4Range prune_AND_internal_range(Int4Range a, Int4Range b) {
 // Int4Range prune_and_internal_range_expr(Int4Range a, Int4Range b) {    
 // }
 
+// doesnt work!
 Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
     Int4RangeSet result;
     result.count = 0;
     result.containsNull = false;
-    result.ranges = (Int4Range*) palloc(sizeof(Int4Range) * 2); 
+    result.ranges = (Int4Range*) malloc(sizeof(Int4Range) * 2); 
 
     if (a.isNull && b.isNull) {
         result.containsNull = true;
@@ -263,4 +264,30 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
     // return result;
 }
 
+// finds the complement of the 1 range. results in 2 disjoint sets
+Int4RangeSet prune_NOT_internal_range(Int4Range a) {
+    Int4RangeSet result;
+    Int4Range left, right;
 
+    result.count = 0;
+    result.containsNull = false;
+    result.ranges = (Int4Range*) malloc(sizeof(Int4Range) * 2);
+
+    // Left range
+    if (a.lower > INT32_MIN) {
+        left.lower = INT32_MIN;
+        left.upper = a.lower - 1;
+        left.isNull = false;
+        result.ranges[result.count++] = left;
+    }
+
+    // Right range
+    if (a.upper < INT32_MAX) {
+        right.lower = a.upper;
+        right.upper = INT32_MAX;
+        right.isNull = false;
+        result.ranges[result.count++] = right;
+    }
+
+    return result;
+}

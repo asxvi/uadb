@@ -10,7 +10,7 @@ Int4Range prune_gte_internal_range(Int4Range a, Int4Range b, bool direction);
 Int4Range prune_eq_internal_range(Int4Range a, Int4Range b);
 
 Int4Range prune_AND_internal_range(Int4Range a, Int4Range b);
-Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b);    // returns a set
-
+Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b);     // returns a set
+Int4RangeSet prune_NOT_internal_range(Int4Range a);                 // returns a set
 
 #endif

@@ -65,6 +65,21 @@ void printRangeSet(Int4RangeSet a){
   printf("}\n");
 }
 
+// Print I4RSet type
+void printRangeSetElog(Int4RangeSet a){
+  elog(INFO, "{");
+  for (size_t i=0; i<a.count; i++){
+    if (a.ranges[i].isNull) {
+      elog(INFO, " NULL ");
+    }
+    else {
+      elog(INFO, " [%d, %d)", a.ranges[i].lower, a.ranges[i].upper);
+    }
+  }
+  elog(INFO, "}\n");
+}
+
+
 // Checks if a is increasing: a.lower <= a.upper
 bool validRange(Int4Range a){
   if (a.isNull) return true;

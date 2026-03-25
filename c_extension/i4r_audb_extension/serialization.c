@@ -190,7 +190,6 @@ serialize_ArrayType(Int4RangeSet set, TypeCacheEntry *typcache)
         }
         
         nulls[i] = false;
-            
         
         lowerRv = make_range_bound(set.ranges[i].lower, true, true);
         upperRv = make_range_bound(set.ranges[i].upper, false, false);
@@ -235,4 +234,76 @@ RangeBound make_range_bound(int32 val, bool is_lower, bool inclusive)
     rvBound.infinite = false;
     rvBound.lower = is_lower;
     return rvBound;
+}
+
+
+
+///////////
+
+/*
+Helper function -
+    Take in ArrayType of type typcache and return local definition of rangeset (I4RSet)
+
+    // Improvements: does not properly handle empty case. Although our results wouldn't result in empty for the most part (i think)
+*/
+ArrayType* 
+serialize_ArrayType2(Int4RangeSet set, Oid rangeTypeOid, TypeCacheEntry *typcache)
+{
+    ArrayType *result;
+    RangeBound lowerRv, upperRv;
+    RangeType *r;
+    int ndim;
+    int dims[1];
+    int lbs[1];
+    Datum *datums;
+    bool  *nulls; 
+
+    if (set.count == 0) {
+        // Return an empty array
+        return construct_empty_array(rangeTypeOid);
+    }
+    
+    datums = palloc(sizeof(Datum) * set.count);
+    nulls = palloc(sizeof(bool) * set.count);
+
+    for (int i = 0; i < set.count; i++) {
+        if (set.ranges[i].isNull) {
+            nulls[i] = true;
+            datums[i] = (Datum) 0;
+            continue;
+        }
+
+        nulls[i] = false;
+
+        lowerRv = make_range_bound(set.ranges[i].lower, true, true);
+        upperRv = make_range_bound(set.ranges[i].upper, false, false);
+
+        r = make_range(typcache, &lowerRv, &upperRv, false, NULL);
+        datums[i] = RangeTypePGetDatum(r);
+    }
+
+    // 1D array
+    ndim = 1;
+    dims[0] = set.count;
+    lbs[0] = 1;
+    
+    elog(INFO, "rangeTypeOid=%u typlen=%d typbyval=%d typalign=%c",
+     rangeTypeOid, typcache->typlen, typcache->typbyval, typcache->typalign);
+
+    result = construct_md_array(
+        datums,
+        nulls,
+        ndim,
+        dims,
+        lbs,
+        rangeTypeOid,         // use actual range type OID
+        typcache->typlen,
+        typcache->typbyval,
+        typcache->typalign
+    );
+
+    pfree(datums);
+    pfree(nulls);
+
+    return result;
 }

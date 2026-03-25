@@ -18,5 +18,5 @@ RangeType* serialize_RangeType(Int4Range range, TypeCacheEntry *typcache);
 RangeBound make_range_bound(int32 val, bool is_lower, bool inclusive);
 Int4RangeSet deserialize_ArrayType(ArrayType *arr, TypeCacheEntry *typcache);
 ArrayType* serialize_ArrayType(Int4RangeSet set, TypeCacheEntry *typcache);
-
+ArrayType* serialize_ArrayType2(Int4RangeSet set, Oid rangeTypeOid, TypeCacheEntry *typcache);
 #endif

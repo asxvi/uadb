@@ -77,6 +77,7 @@ typedef struct {
 // add extra utilites for working with defined type
 void printRange(Int4Range a);
 void printRangeSet(Int4RangeSet a);
+void printRangeSetElog(Int4RangeSet a);
 bool validRange(Int4Range a);
 bool validRangeStrict(Int4Range a);
 
