@@ -354,27 +354,37 @@ create aggregate sumTestNN (int4range[], resizeTrigger integer, sizeLimit intege
 ----------------------------------------------------------------------------
 
 
-CREATE FUNCTION prune_lt_range(a int4range, b int4range, direction boolean) 
+CREATE FUNCTION prune_range_lt(a int4range, b int4range, direction boolean) 
 RETURNS int4range
-AS 'MODULE_PATHNAME', 'prune_lt_range'
+AS 'MODULE_PATHNAME', 'prune_range_lt'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION prune_gt_range(a int4range, b int4range, direction boolean) 
+CREATE FUNCTION prune_range_gt(a int4range, b int4range, direction boolean) 
 RETURNS int4range
-AS 'MODULE_PATHNAME', 'prune_gt_range'
+AS 'MODULE_PATHNAME', 'prune_range_gt'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION prune_lte_range(a int4range, b int4range, direction boolean) 
+CREATE FUNCTION prune_range_lte(a int4range, b int4range, direction boolean) 
 RETURNS int4range
-AS 'MODULE_PATHNAME', 'prune_lte_range'
+AS 'MODULE_PATHNAME', 'prune_range_lte'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION prune_gte_range(a int4range, b int4range, direction boolean) 
+CREATE FUNCTION prune_range_gte(a int4range, b int4range, direction boolean) 
 RETURNS int4range
-AS 'MODULE_PATHNAME', 'prune_gte_range'
+AS 'MODULE_PATHNAME', 'prune_range_gte'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION prune_eq_range(a int4range, b int4range) 
+CREATE FUNCTION prune_range_eq(a int4range, b int4range) 
 RETURNS int4range
-AS 'MODULE_PATHNAME', 'prune_eq_range'
+AS 'MODULE_PATHNAME', 'prune_range_eq'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_range_and(a int4range, b int4range) 
+RETURNS int4range
+AS 'MODULE_PATHNAME', 'prune_range_and'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_range_or(a int4range, b int4range) 
+RETURNS int4range
+AS 'MODULE_PATHNAME', 'prune_range_or'
 LANGUAGE C STRICT;

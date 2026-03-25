@@ -48,11 +48,13 @@ PG_FUNCTION_INFO_V1(set_normalize);
 PG_FUNCTION_INFO_V1(set_reduce_size);
 
 /*(Prune Functions)*/
-PG_FUNCTION_INFO_V1(prune_lt_range);
-PG_FUNCTION_INFO_V1(prune_gt_range);
-PG_FUNCTION_INFO_V1(prune_lte_range);
-PG_FUNCTION_INFO_V1(prune_gte_range);
-PG_FUNCTION_INFO_V1(prune_eq_range);
+PG_FUNCTION_INFO_V1(prune_range_lt);
+PG_FUNCTION_INFO_V1(prune_range_gt);
+PG_FUNCTION_INFO_V1(prune_range_lte);
+PG_FUNCTION_INFO_V1(prune_range_gte);
+PG_FUNCTION_INFO_V1(prune_range_eq);
+PG_FUNCTION_INFO_V1(prune_range_and);
+PG_FUNCTION_INFO_V1(prune_range_or);
 
 /*(Aggregate Functions)*/
 //          sum
@@ -197,7 +199,50 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     PG_RETURN_RANGE_P(output);                                      \
 }
 
+#define DEFINE_PRUNE_RANGE_FUNC_LOGICAL(func_name, internal_func)       \
+Datum func_name(PG_FUNCTION_ARGS)                                       \
+{                                                                       \
+    RangeType      *a_range, *b_range, *output;                         \
+    TypeCacheEntry *typcache;                                           \
+    Int4Range       a, b, result;                                       \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {PG_RETURN_NULL();}         \
+    a_range   = PG_GETARG_RANGE_P(0);                                   \
+    b_range   = PG_GETARG_RANGE_P(1);                                   \
+    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);   \
+    a = deserialize_RangeType(a_range, typcache);                       \
+    b = deserialize_RangeType(b_range, typcache);                       \
+    result = internal_func (a, b);                                      \
+    if (result.isNull) {PG_RETURN_NULL();}                              \
+    output = serialize_RangeType(result, typcache);                     \
+    PG_RETURN_RANGE_P(output);                                          \
+}
 
+#define DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(func_name, internal_func)    \
+Datum func_name(PG_FUNCTION_ARGS)                                       \
+{                                                                       \
+    ArrayType *output;                                                  \
+    RangeType      *a_range, *b_range;                                  \
+    Oid rangetypid;                                                    \
+    TypeCacheEntry *typcache;                                           \
+    Int4Range       a, b;                                               \
+    Int4RangeSet result;                                                \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {PG_RETURN_NULL();}         \
+    a_range   = PG_GETARG_RANGE_P(0);                                   \
+    b_range   = PG_GETARG_RANGE_P(1);                                   \
+    rangetypid = RangeTypeGetOid(a_range);                             \
+    typcache  = lookup_type_cache(rangetypid, TYPECACHE_RANGE_INFO);   \
+    a = deserialize_RangeType(a_range, typcache);                       \
+    b = deserialize_RangeType(b_range, typcache);                       \
+    result = internal_func (a, b);                                      \
+    /* Nothing to return */                                             \
+    if (result.count == 0 && !result.containsNull) {                    \
+        PG_RETURN_NULL();                                               \
+    }                                                                   \
+    output = serialize_ArrayType(result, typcache);                     \
+    if (result.ranges)                                                  \
+        pfree(result.ranges);                                           \
+    PG_RETURN_ARRAYTYPE_P(output);                                      \
+}
 
 /*Function declarations*/
 RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
@@ -245,36 +290,40 @@ DEFINE_SET_LOGICAL_FUNC(set_eq, set_equal_internal)
 /////////////////////
  // Prune Functions
 /////////////////////
-DEFINE_PRUNE_RANGE_FUNC(prune_lt_range, prune_lt_internal_range)
-DEFINE_PRUNE_RANGE_FUNC(prune_gt_range, prune_gt_internal_range)
-DEFINE_PRUNE_RANGE_FUNC(prune_lte_range, prune_lte_internal_range)
-DEFINE_PRUNE_RANGE_FUNC(prune_gte_range, prune_gte_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_range_lt, prune_lt_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_range_gt, prune_gt_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_range_lte, prune_lte_internal_range)
+DEFINE_PRUNE_RANGE_FUNC(prune_range_gte, prune_gte_internal_range)
 
-Datum
-prune_eq_range(PG_FUNCTION_ARGS) {
-    RangeType      *a_range, *b_range, *output;
-    TypeCacheEntry *typcache;
-    Int4Range       a, b, result;
+DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_eq, prune_eq_internal_range)
+DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_and, prune_AND_internal_range)
+DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(prune_range_or, prune_OR_internal_range)
+
+// Datum
+// prune_range_eq(PG_FUNCTION_ARGS) {
+//     RangeType      *a_range, *b_range, *output;
+//     TypeCacheEntry *typcache;
+//     Int4Range       a, b, result;
     
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {
-        PG_RETURN_NULL();
-    }
+//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {
+//         PG_RETURN_NULL();
+//     }
     
-    // deserialize, operate, serialize
-    a_range   = PG_GETARG_RANGE_P(0);
-    b_range   = PG_GETARG_RANGE_P(1);
-    typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);
-    a = deserialize_RangeType(a_range, typcache);
-    b = deserialize_RangeType(b_range, typcache);
-    result = prune_eq_internal_range(a, b);
+//     // deserialize, operate, serialize
+//     a_range   = PG_GETARG_RANGE_P(0);
+//     b_range   = PG_GETARG_RANGE_P(1);
+//     typcache  = lookup_type_cache(a_range->rangetypid, TYPECACHE_RANGE_INFO);
+//     a = deserialize_RangeType(a_range, typcache);
+//     b = deserialize_RangeType(b_range, typcache);
+//     result = prune_eq_internal_range(a, b);
     
-    if (result.isNull) {
-        PG_RETURN_NULL();
-    }
-    output = serialize_RangeType(result, typcache);
+//     if (result.isNull) {
+//         PG_RETURN_NULL();
+//     }
+//     output = serialize_RangeType(result, typcache);
     
-    PG_RETURN_RANGE_P(output);
-}
+//     PG_RETURN_RANGE_P(output);
+// }
 
 /////////////////////
  // Helper Functions
@@ -1917,3 +1966,4 @@ agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
+

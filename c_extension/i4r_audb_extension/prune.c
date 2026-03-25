@@ -207,3 +207,60 @@ Int4Range prune_eq_internal_range(Int4Range a, Int4Range b) {
     }
     return result;
 }
+
+// NOTE: and is binary not unary. combining conditions required stacking ands
+// all points of intersection. both sides shrink
+Int4Range prune_AND_internal_range(Int4Range a, Int4Range b) {
+    return prune_eq_internal_range(a, b);
+}
+// evaluate the expressions first, and then feed them into prune_and_internal_range()
+// Int4Range prune_and_internal_range_expr(Int4Range a, Int4Range b) {    
+// }
+
+Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
+    Int4RangeSet result;
+    result.count = 0;
+    result.containsNull = false;
+    result.ranges = (Int4Range*) palloc(sizeof(Int4Range) * 2); 
+
+    if (a.isNull && b.isNull) {
+        result.containsNull = true;
+        return result;
+    }
+
+    if (a.isNull) {
+        result.ranges[0] = b;
+        result.count = 1;
+        return result;
+    }
+
+    if (b.isNull) {
+        result.ranges[0] = a;
+        result.count = 1;
+        return result;
+    }
+
+    // Overlapping or contiguous ranges
+    if (a.upper >= b.lower && b.upper >= a.lower) {
+        result.ranges[0].lower = (a.lower < b.lower) ? a.lower : b.lower;
+        result.ranges[0].upper = (a.upper > b.upper) ? a.upper : b.upper;
+        result.ranges[0].isNull = false;
+        result.count = 1;
+    } 
+    else {
+        // Disjoint ranges → both kept in order
+        if (a.lower < b.lower) {
+            result.ranges[0] = a;
+            result.ranges[1] = b;
+        } else {
+            result.ranges[0] = b;
+            result.ranges[1] = a;
+        }
+        result.count = 2;
+    }
+
+    return normalize(result);
+    // return result;
+}
+
+
