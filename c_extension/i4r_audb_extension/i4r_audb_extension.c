@@ -1924,6 +1924,10 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
 
 PG_FUNCTION_INFO_V1(prune_lt_range);
 PG_FUNCTION_INFO_V1(prune_gt_range);
+PG_FUNCTION_INFO_V1(prune_lte_range);
+PG_FUNCTION_INFO_V1(prune_gte_range);
 
 DEFINE_PRUNE_RANGE_FUNC(prune_lt_range, prune_lt_internal)
 DEFINE_PRUNE_RANGE_FUNC(prune_gt_range, prune_gt_internal)
+DEFINE_PRUNE_RANGE_FUNC(prune_lte_range, prune_lte_internal)
+DEFINE_PRUNE_RANGE_FUNC(prune_gte_range, prune_gte_internal)

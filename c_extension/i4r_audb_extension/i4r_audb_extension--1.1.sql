@@ -353,26 +353,23 @@ create aggregate sumTestNN (int4range[], resizeTrigger integer, sizeLimit intege
 ---------------------------Prune functions-----------------------------
 ----------------------------------------------------------------------------
 
--- -- range_add takes 2 int4range types and returns the sum
--- CREATE FUNCTION prune_lt_bool(a int4range, b int4range, direction boolean)
--- RETURNS boolean
--- AS 'MODULE_PATHNAME', 'prune_lt_bool'
--- LANGUAGE C STRICT;
 
--- range_add takes 2 int4range types and returns the sum
 CREATE FUNCTION prune_lt_range(a int4range, b int4range, direction boolean) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'prune_lt_range'
 LANGUAGE C STRICT;
 
--- -- range_add takes 2 int4range types and returns the sum
--- CREATE FUNCTION prune_gt_bool(a int4range, b int4range, direction boolean) 
--- RETURNS boolean
--- AS 'MODULE_PATHNAME', 'prune_gt_bool'
--- LANGUAGE C STRICT;
-
--- range_add takes 2 int4range types and returns the sum
 CREATE FUNCTION prune_gt_range(a int4range, b int4range, direction boolean) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'prune_gt_range'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_lte_range(a int4range, b int4range, direction boolean) 
+RETURNS int4range
+AS 'MODULE_PATHNAME', 'prune_lte_range'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_gte_range(a int4range, b int4range, direction boolean) 
+RETURNS int4range
+AS 'MODULE_PATHNAME', 'prune_gte_range'
 LANGUAGE C STRICT;
