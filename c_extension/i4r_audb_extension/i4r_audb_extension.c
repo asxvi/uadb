@@ -52,9 +52,11 @@ PG_FUNCTION_INFO_V1(prune_range_lt);
 PG_FUNCTION_INFO_V1(prune_range_gt);
 PG_FUNCTION_INFO_V1(prune_range_lte);
 PG_FUNCTION_INFO_V1(prune_range_gte);
+
 PG_FUNCTION_INFO_V1(prune_range_eq);
 PG_FUNCTION_INFO_V1(prune_range_and);
-PG_FUNCTION_INFO_V1(prune_range_or);        // OR does not work:ERROR:  type with OID 1 does not exist
+PG_FUNCTION_INFO_V1(prune_range_or);
+PG_FUNCTION_INFO_V1(prune_range_not);
 
 /*(Aggregate Functions)*/
 //          sum
@@ -300,6 +302,33 @@ DEFINE_PRUNE_RANGE_FUNC(prune_range_gte, prune_gte_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_eq, prune_eq_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_and, prune_AND_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(prune_range_or, prune_OR_internal_range)
+
+Datum
+prune_range_not(PG_FUNCTION_ARGS)
+{
+    RangeType  *r;
+    Oid rangetypid;
+    TypeCacheEntry *typcache;
+    Int4Range inRange;
+    Int4RangeSet resultSet;
+    ArrayType *arr;
+    
+    if (PG_ARGISNULL(0)) {
+        PG_RETURN_NULL();
+    }
+    
+    // deserialize, operate, serialize
+    r = PG_GETARG_RANGE_P(0);
+    rangetypid = RangeTypeGetOid(r);
+    elog(INFO, "rangetypid = %u", rangetypid);
+    typcache = lookup_type_cache(rangetypid, TYPECACHE_RANGE_INFO);
+    inRange = deserialize_RangeType(r, typcache);
+    resultSet = prune_NOT_internal_range(inRange);
+    printRangeSetElog(resultSet);
+    arr = serialize_ArrayType2(resultSet, rangetypid, typcache);
+
+    PG_RETURN_ARRAYTYPE_P(arr);
+}
 
 // Datum
 // prune_range_eq(PG_FUNCTION_ARGS) {
@@ -1968,32 +1997,3 @@ agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
-
-PG_FUNCTION_INFO_V1(prune_range_not);
-
-Datum
-prune_range_not(PG_FUNCTION_ARGS)
-{
-    RangeType  *r;
-    Oid rangetypid;
-    TypeCacheEntry *typcache;
-    Int4Range inRange;
-    Int4RangeSet resultSet;
-    ArrayType *arr;
-    
-    if (PG_ARGISNULL(0)) {
-        PG_RETURN_NULL();
-    }
-    
-    // deserialize, operate, serialize
-    r = PG_GETARG_RANGE_P(0);
-    rangetypid = RangeTypeGetOid(r);
-    elog(INFO, "rangetypid = %u", rangetypid);
-    typcache = lookup_type_cache(rangetypid, TYPECACHE_RANGE_INFO);
-    inRange = deserialize_RangeType(r, typcache);
-    resultSet = prune_NOT_internal_range(inRange);
-    printRangeSetElog(resultSet);
-    arr = serialize_ArrayType2(resultSet, rangetypid, typcache);
-
-    PG_RETURN_ARRAYTYPE_P(arr);
-}

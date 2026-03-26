@@ -7,187 +7,104 @@
 #define malloc palloc
 #define free pfree
 
-// Handles the 3 pruning cases for LT in each direction false=left, true=right
+#define INT_MIN_LOCAL INT32_MIN
+#define INT_MAX_LOCAL INT32_MAX
+
+// handles strict less than: e1 < e2
 Int4Range prune_lt_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
-    
-    if (direction == 0) {
-        // strictly less than. Just return left side == A
-        if (range_less_than(a, b) == 1) {
-            return a;
-        }
-        // A is not LT B. result is NULL
-        else if (range_less_than(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return A pruned on UB by min
-        result.lower = a.lower;
-        result.upper = min2(a.upper, b.lower);
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
+
+    // 0 = left, 1 = right
+    if (direction == 0) { 
+        Int4Range bound;
+        bound.lower = INT32_MIN;
+        bound.upper = b.upper - 1;  // [-inf, max(b)-1]
+        bound.isNull = false;
+        result = intersect_range(a, bound);
     } 
-    else if (direction == 1) {
-        // strictly less than. Just return right side == B
-        if (range_less_than(a, b) == 1) {
-            return b;
-        }
-        // A is not LT B. result is NULL
-        else if (range_less_than(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return B pruned on LB by A
-        result.lower = max2(a.upper, b.lower);
-        result.upper = b.upper;
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
-    }
-    else{
-        elog(ERROR, "Error, input a boolean as the third parameter; (false=left, true=right)");
+    else { 
+        Int4Range bound;
+        bound.lower = a.lower + 1;  // [min(a)+1, +inf]
+        bound.upper = INT32_MAX;
+        bound.isNull = false;
+        result = intersect_range(b, bound);
     }
 
+    if (!validRange(result)) result.isNull = true;
     return result;
 }
 
-// Handles the 3 pruning cases for GT in each direction false=left, true=right
+// andles strict less than or equal: e1 < e2
+Int4Range prune_lte_internal_range(Int4Range a, Int4Range b, bool direction) {
+    Int4Range result;
+    result.isNull = false;
+
+    // 0 = left, 1 = right
+    if (direction == 0) { 
+        Int4Range bound;
+        bound.lower = INT32_MIN;
+        bound.upper = b.upper;  // [-inf, max(b)]
+        bound.isNull = false;
+        result = intersect_range(a, bound);
+    } 
+    else { 
+        Int4Range bound;
+        bound.lower = a.lower;  // [min(a), +inf]
+        bound.upper = INT32_MAX;
+        bound.isNull = false;
+        result = intersect_range(b, bound);
+    }
+
+    if (!validRange(result)) result.isNull = true;
+    return result;
+}
+
+// handles strict greater than: e1 > e2
 Int4Range prune_gt_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
 
     if (direction == 0) {
-        // strictly greater than. Just return left side == A
-        if (range_greater_than(a, b) == 1) {
-            return a;
-        }
-        // A is not GT B. result is NULL
-        else if (range_greater_than(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return A pruned on UB by B
-        result.lower = max2(a.lower, b.lower);
-        result.upper = a.upper;
+        Int4Range bound;
+        bound.lower = b.lower + 1; // [min(b)+1, +inf]
+        bound.upper = INT32_MAX;
+        bound.isNull = false;
+        result = intersect_range(a, bound);
     } 
-    else if (direction == 1) {
-        // strictly less than. Just return right side == B
-        if (range_greater_than(a, b) == 1) {
-            return b;
-        }
-        // A is not LT B. result is NULL
-        else if (range_greater_than(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return B pruned on LB by A
-        result.lower = b.lower;
-        result.upper = min2(a.upper, b.upper);
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
-    }
-    else{
-        elog(ERROR, "Error, input a boolean as the third parameter; (false=left, true=right)");
+    else {
+        Int4Range bound;
+        bound.lower = INT32_MIN;
+        bound.upper = a.upper - 1; // [-inf, max(a)-1]
+        bound.isNull = false;
+        result = intersect_range(b, bound);
     }
 
+    if (!validRange(result)) result.isNull = true;
     return result;
 }
 
-// Handles the 3 pruning cases for LTE in each direction false=left, true=right
-Int4Range prune_lte_internal_range(Int4Range a, Int4Range b, bool direction) {
-    Int4Range result;
-    result.isNull = false;
-    
-    if (direction == 0) {
-        // strictly less than. Just return left side == A
-        if (range_less_than_equal(a, b) == 1) {
-            return a;
-        }
-        // A is not LT B. result is NULL
-        else if (range_less_than_equal(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return A pruned on UB by min
-        result.lower = a.lower;
-        result.upper = min2(a.upper, b.lower);
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
-    } 
-    else if (direction == 1) {
-        // strictly less than. Just return right side == B
-        if (range_less_than_equal(a, b) == 1) {
-            return b;
-        }
-        // A is not LT B. result is NULL
-        else if (range_less_than_equal(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return B pruned on LB by A
-        result.lower = max2(a.upper, b.lower);
-        result.upper = b.upper;
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
-    }
-    else{
-        elog(ERROR, "Error, input a boolean as the third parameter; (false=left, true=right)");
-    }
-
-    return result;
-}
-
-// Handles the 3 pruning cases for GTE in each direction false=left, true=right
+// handles greater than or equal: e1 >= e2
 Int4Range prune_gte_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
 
     if (direction == 0) {
-        // strictly greater than. Just return left side == A
-        if (range_greater_than_equal(a, b) == 1) {
-            return a;
-        }
-        // A is not GT B. result is NULL
-        else if (range_greater_than_equal(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return A pruned on UB by B
-        result.lower = max2(a.lower, b.lower);
-        result.upper = a.upper;
+        Int4Range bound;
+        bound.lower = b.lower; // [min(b), +inf]
+        bound.upper = INT32_MAX;
+        bound.isNull = false;
+        result = intersect_range(a, bound);
     } 
-    else if (direction == 1) {
-        // strictly less than. Just return right side == B
-        if (range_greater_than_equal(a, b) == 1) {
-            return b;
-        }
-        // A is not LT B. result is NULL
-        else if (range_greater_than_equal(a,b) == 0) {
-            result.isNull = true;
-            return result;
-        }
-        // otherwise return B pruned on LB by A
-        result.lower = b.lower;
-        result.upper = min2(a.upper, b.upper);
-        if (!validRange(result)) {
-            result.isNull = true;
-            return result;
-        }
-    }
-    else{
-        elog(ERROR, "Error, input a boolean as the third parameter; (false=left, true=right)");
+    else {
+        Int4Range bound;
+        bound.lower = INT32_MIN;
+        bound.upper = a.upper; // [-inf, max(a)]
+        bound.isNull = false;
+        result = intersect_range(b, bound);
     }
 
+    if (!validRange(result)) result.isNull = true;
     return result;
 }
 
@@ -242,7 +159,7 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
     }
 
     // Overlapping or contiguous ranges
-    if (a.upper >= b.lower && b.upper >= a.lower) {
+    if (a.upper > b.lower && b.upper > a.lower) {
         result.ranges[0].lower = (a.lower < b.lower) ? a.lower : b.lower;
         result.ranges[0].upper = (a.upper > b.upper) ? a.upper : b.upper;
         result.ranges[0].isNull = false;

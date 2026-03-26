@@ -630,3 +630,117 @@ Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep){
 
   return sortedInput;
 }
+
+// intersection between 2 ranges
+Int4Range intersect_range(Int4Range a, Int4Range b) {
+  Int4Range result;
+  result.isNull = false;
+
+  if (a.isNull || b.isNull) {
+    result.isNull = true;
+    return result;
+  }
+
+  result.lower = (a.lower > b.lower) ? a.lower : b.lower;
+  result.upper = (a.upper < b.upper) ? a.upper : b.upper;
+
+  if (result.lower >= result.upper) {
+    result.isNull = true;
+  }
+
+  return result;
+}
+
+// intersection between 2 sets
+Int4RangeSet intersect_set(Int4RangeSet a, Int4RangeSet b) {
+  Int4RangeSet result;
+  result.count = 0;
+  result.containsNull = a.containsNull && b.containsNull;
+  result.ranges = palloc(sizeof(Int4Range) * (a.count * b.count));
+
+  for (int i = 0; i < a.count; i++) {
+    for (int j = 0; j < b.count; j++) {
+      Int4Range r = intersect_range(a.ranges[i], b.ranges[j]);
+      if (!r.isNull) {
+        result.ranges[result.count++] = r;
+      }
+    }
+  }
+
+  return result;
+}
+
+Int4RangeSet union_range(Int4Range a, Int4Range b) {
+  Int4RangeSet result;
+  result.count = 0;
+  result.containsNull = false;
+  result.ranges = palloc(sizeof(Int4Range) * 2);
+
+  if (a.isNull && b.isNull) {
+    result.containsNull = true;
+    return result;
+  }
+  if (a.isNull) {
+    result.ranges[0] = b;
+    result.count = 1;
+    return result;
+  }
+  if (b.isNull) {
+    result.ranges[0] = a;
+    result.count = 1;
+    return result;
+  }
+
+  // Merge if overlapping or adjacent
+  if (a.upper >= b.lower && b.upper >= a.lower) {
+    Int4Range merged;
+    merged.lower = (a.lower < b.lower) ? a.lower : b.lower;
+    merged.upper = (a.upper > b.upper) ? a.upper : b.upper;
+    merged.isNull = false;
+    result.ranges[0] = merged;
+    result.count = 1;
+  } 
+  else {
+    // Disjoint
+    if (a.lower < b.lower) {
+      result.ranges[0] = a;
+      result.ranges[1] = b;
+    } 
+    else {
+      result.ranges[0] = b;
+      result.ranges[1] = a;
+    }
+    result.count = 2;
+  }
+
+  return result;
+}
+
+
+Int4RangeSet union_set(Int4RangeSet a, Int4RangeSet b) {
+  Int4RangeSet result;
+  result.count = 0;
+  result.containsNull = a.containsNull || b.containsNull;
+  result.ranges = palloc(sizeof(Int4Range) * (a.count + b.count));
+
+  // copy all ranges from a
+  for (int i = 0; i < a.count; i++) {
+    result.ranges[result.count++] = a.ranges[i];
+  }
+
+  // merge each range from b
+  for (int i = 0; i < b.count; i++) {
+    Int4RangeSet temp = union_range(result.ranges[0], b.ranges[i]);
+    if (temp.count == 1) {
+      result.ranges[0] = temp.ranges[0];
+      result.count = 1;
+    }
+     else {
+      result.ranges[0] = temp.ranges[0];
+      result.ranges[1] = temp.ranges[1];
+      result.count = 2;
+    }
+  }
+
+  return result;
+}
