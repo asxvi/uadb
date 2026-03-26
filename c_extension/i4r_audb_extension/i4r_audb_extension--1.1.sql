@@ -393,3 +393,23 @@ CREATE FUNCTION prune_range_not(a int4range)
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_range_not'
 LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_lt(a int4range[], b int4range[], direction boolean) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_lt'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_lte(a int4range[], b int4range[], direction boolean) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_lte'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_gt(a int4range[], b int4range[], direction boolean) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_gt'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_gte(a int4range[], b int4range[], direction boolean) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_gte'
+LANGUAGE C STRICT;

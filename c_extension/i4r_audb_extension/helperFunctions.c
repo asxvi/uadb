@@ -716,7 +716,7 @@ Int4RangeSet union_range(Int4Range a, Int4Range b) {
   return result;
 }
 
-
+// concat and normalize
 Int4RangeSet union_set(Int4RangeSet a, Int4RangeSet b) {
   Int4RangeSet result;
   result.count = 0;

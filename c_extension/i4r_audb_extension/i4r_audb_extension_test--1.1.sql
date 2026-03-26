@@ -363,7 +363,8 @@ CREATE TEMP TABLE tX_prune_basic (
 );
 INSERT INTO tX_prune_basic (a, b, mult) VALUES
     (array[int4range(1,2), int4range(10,12)], array[int4range(8,14)], int4range(1,4)),
-    (array[int4range(20,25), int4range(40,42)], array[int4range(18,100)], int4range(1,4));
+    (array[int4range(20,25), int4range(40,42)], array[int4range(18,100)], int4range(1,4)),
+    (array[int4range(1,9), int4range(20,25)], array[int4range(5,15)], int4range(1,4));
     -- (array[int4range(100,200), int4range(10,12)], array[int4range(8,14)], int4range(1,4)),
 
 DROP TABLE IF EXISTS tX_r_prune_basic;

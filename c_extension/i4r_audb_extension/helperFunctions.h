@@ -94,7 +94,8 @@ Int4RangeSet max_rangeSet(Int4RangeSet a, Int4RangeSet b);
 // logical helpers
 Int4Range intersect_range(Int4Range a, Int4Range b);
 Int4RangeSet intersect_set(Int4RangeSet a, Int4RangeSet b);
-
+Int4RangeSet union_range(Int4Range a, Int4Range b);
+Int4RangeSet union_set(Int4RangeSet a, Int4RangeSet b);
 
 Int4Range floatIntervalSetMult(Int4RangeSet a, Multiplicity mult);
 bool overlap(Int4Range a, Int4Range b);
