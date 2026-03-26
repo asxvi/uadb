@@ -413,3 +413,18 @@ CREATE FUNCTION prune_set_gte(a int4range[], b int4range[], direction boolean)
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_set_gte'
 LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_eq(a int4range[], b int4range[]) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_eq'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_and(a int4range[], b int4range[]) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_and'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION prune_set_or(a int4range[], b int4range[]) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_or'
+LANGUAGE C STRICT;

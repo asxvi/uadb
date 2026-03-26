@@ -17,7 +17,6 @@ Int4RangeSet prune_lte_set_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_gt_set_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_gte_set_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b);
-Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_AND_internal_set(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b);
 
