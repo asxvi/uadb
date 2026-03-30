@@ -1,9 +1,14 @@
+# external imports
 import ast
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
+from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 from pathlib import Path
 from typing import List
+
+# local imports
 from DataTypes import *
 
 class StatisticsPlotter:
@@ -30,14 +35,15 @@ class StatisticsPlotter:
         iv = df['independent_variable'][0]
         self.iv = iv
 
-        # plot stuff
+        # plot stuff- uncomment for certain plots (some worse than others)
         self.plot_time_coverage_by_reduce(df)
-        self.plot_reduction_heatmap(df)
+        # self.plot_reduction_heatmap(df)
         self.plot_3_row_red_vs_TimeNCover(df)
-        self.plot_convergence_vs_n(df)
+        self.plot_convergence_coverage_vs_n(df)
         self.plot_convergence_vs_gap(df)
-        self.plot_gap_vs_time_vs_result_size(df)
+        # self.plot_gap_vs_time_vs_result_size(df)
         self.plot_gap_vs_time_vs_underreduction(df)
+        self.plot_efficiency_vs_ni(df)
         
         print("Results saved in: ", self.resultFilepath)
 
@@ -48,6 +54,12 @@ class StatisticsPlotter:
         self.plot_timeNaccuracy_vs_iv(df, independent_variable)
         self.run_reduce_plot_suite(df, independent_variable)
     
+    def save_fig(self, fig, fname) -> str:
+        outpath = f"{self.resultFilepath}/{fname}"
+        fig.savefig(outpath, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        return outpath
+
 
     # ----------------------------------  
     # --- Plotting Code ---
@@ -85,7 +97,7 @@ class StatisticsPlotter:
         return outpath
     
     def plot_time_coverage_by_reduce(self, df: pd.DataFrame) -> str:
-        ''' plot time vs IV and coverage vs IV for'''
+        ''' plot time and coverage vs reduce params '''
 
         indep_variable = self.iv
 
@@ -98,16 +110,15 @@ class StatisticsPlotter:
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)       
         fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
         for p, group in dfg:
-            # Make sure each group is sorted by dataset_size
+            # Make sure each group is sorted by IV
             group = group.sort_values(indep_variable)
             x = group[indep_variable]
             y_time = group['sum_time_mean']
             y_time_err = group['sum_time_std']
             y_coverage = group['result_coverage_mean']
 
-            # Plot time with error bars
+            # Plot time and coverage
             ax1.errorbar(x, y_time, yerr=y_time_err, fmt='o-', capsize=5, label=str(p))
-            # Plot coverage
             ax2.errorbar(x, y_coverage, fmt='o-', capsize=5, label=str(p))
 
         # TIME axis labels
@@ -115,7 +126,7 @@ class StatisticsPlotter:
         ax1.set_title(f'Time vs {indep_variable} by Reduction Parameters')
         ax1.grid(True, alpha=0.3)
         ax1.tick_params(axis='x', rotation=45)
-        # ax1.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+        ax1.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
 
         # COVERAGE axis labels
         ax2.set_ylabel('Coverage')
@@ -156,7 +167,7 @@ class StatisticsPlotter:
 
             # PLot 1: time
             ax = axes[0, i]
-            y = df_ni['sum_time_mean']
+            y = df_ni['time_norm']
             ax.plot(x_labels, y, marker='o')
             ax.set_title(f'ni={ni}')
             ax.set_xlabel('red')
@@ -165,7 +176,7 @@ class StatisticsPlotter:
 
             # Plot 2: coverage
             ax = axes[1, i]
-            y = df_ni['result_coverage_mean']
+            y = df_ni['coverage_norm']
             ax.plot(x_labels, y, marker='o')
             ax.set_title(f'ni={ni}')
             ax.set_xlabel('red')
@@ -190,6 +201,7 @@ class StatisticsPlotter:
         # axes[2][0].set_ylabel('Distance (smaller=bettwe)')
         # handles, labels = axes[0][0][-1].get_legend_handles_labels()
         # fig.legend(handles, labels, title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+        # fig.legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
 
         plt.tight_layout()
         outfile = f'distance_vs_NI_and_red_{self.master_seed}'
@@ -200,7 +212,6 @@ class StatisticsPlotter:
     
     def plot_convergence_vs_n(self, df: pd.DataFrame) -> str:
         redParams = sorted(df['reduce_triggerSz_sizeLim_tuple'].unique())
-        n_redParams = len(redParams)
     
         fig, (ax) = plt.subplots(1, 1, figsize=(12, 5))
         fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
@@ -223,6 +234,30 @@ class StatisticsPlotter:
         plt.savefig(outpath, dpi=300, bbox_inches='tight')
         plt.close(fig)
         return outpath
+    
+    def plot_convergence_coverage_vs_n(self, df: pd.DataFrame) -> str:
+        if self.iv != 'dataset_size':
+            return
+        redParams = sorted(df['reduce_triggerSz_sizeLim_tuple'].unique())
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
+
+        for redParamTuple in redParams:
+            subdf = df[df['reduce_triggerSz_sizeLim_tuple'] == redParamTuple]
+            axes[0].plot(subdf['dataset_size'], subdf['minEffectiveIntervalCountMean'], marker='o', label=str(redParamTuple))
+            axes[1].plot(subdf['dataset_size'], subdf['result_coverage_mean'], marker='o', label=str(redParamTuple))
+
+        axes[0].set_ylabel('Interval Count')
+        axes[1].set_ylabel('Coverage')
+        axes[1].set_xlabel('Dataset Size')
+        axes[0].set_title('Convergence Interval Count')
+        axes[1].set_title('Convergence Coverage')
+        axes[1].legend(title='(trigger, size_limit)', loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+
+        for ax in axes:
+            ax.grid(True)
+
+        return self.save_fig(fig, f'convergence_coverage_vs_n_{self.master_seed}')
 
     def plot_convergence_vs_gap(self, df: pd.DataFrame) -> str:
         '''find when certain gap size ceonverge at what N '''
@@ -371,6 +406,78 @@ class StatisticsPlotter:
         plt.close()
         return outpath
 
+    def plot_efficiency_heatmap(self, df:pd.DataFrame):
+        '''
+            heatmap reduce_triggers(x) vs NI(y) 
+            efficiency = combined['efficiency'] = combined['coverage_norm'] / combined['time_norm']
+        '''
+
+        pivot_eff = df.pivot_table(
+            index='num_intervals',
+            columns='reduce_triggerSz_sizeLim',
+            values='efficiency',
+            aggfunc='mean'
+        )
+        plt.figure(figsize=(8,5))
+        sns.heatmap(pivot_eff, annot=True, fmt=".2f", cmap="coolwarm")
+        plt.title("Coverage per Unit Time by Num Intervals and Reduction Config")
+        plt.show()
+
+    def plot_efficiency_vs_ni(self, df:pd.DataFrame, filename="efficiency_vs_ni.pdf"):
+        filename = f"{self.resultFilepath}/{filename}"
+        with PdfPages(filename) as pdf:
+            # heatmap reduce_triggers(x) vs NI(y) 
+            pivot_eff = df.pivot_table(
+                index='num_intervals',
+                columns='reduce_triggerSz_sizeLim',
+                values='efficiency',
+                aggfunc='mean'
+            )
+            plt.figure(figsize=(6,3))
+            sns.heatmap(pivot_eff, annot=True, fmt=".2f", cmap="coolwarm", annot_kws={"size": 6})
+            plt.title("Efficiency (coverage_norm/time_norm)")
+            plt.xlabel("red")
+            plt.ylabel("ni")
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+            
+            ni_values = sorted(df['num_intervals'].unique())
+            red_configs = sorted(df['reduce_triggerSz_sizeLim'].unique())
+            fig, axes = plt.subplots(1, len(ni_values), figsize=(4*len(ni_values), 3))
+            axes = axes.flatten() if len(ni_values) > 1 else [axes]
+            fig.text(0.5, 0.05, self.param_str, ha='center', va='center', fontsize=7, color='black', wrap=True)
+
+            handles, labels = None, None
+            for i, ni in enumerate(ni_values):
+                ax = axes[i]
+                ni_df = df[df['num_intervals'] == ni]
+                for r in red_configs:
+                    sub = ni_df[ni_df['reduce_triggerSz_sizeLim'] == r]
+                    ax.scatter(sub['time_norm'], sub['coverage_norm'], label=str(r), s=50)
+
+                if handles is None:
+                    handles, labels = ax.get_legend_handles_labels()
+
+                # no scintific notation
+                ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+                ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+                
+                ax.set_title(f'ni={ni}')
+                ax.set_xlabel('relative time')
+                ax.set_ylabel('relative coverage')
+                ax.grid(True, alpha=0.3)
+                # ax.legend(fontsize=8)
+            # fig.legend(handles,labels,title='(trigger, size_limit)',loc='center left',bbox_to_anchor=(1.02, 0.5),fontsize=8)
+            plt.tight_layout(rect=[0, 0.08, 0.85, 1])
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+            fig = plt.figure(figsize=(6,2))
+            fig.legend(handles, labels, title='(trigger, size_limit)', loc='center', fontsize=8)
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+            
     # ----------------------------------  
     # --- helpers ---
     # ----------------------------------
@@ -403,6 +510,9 @@ class StatisticsPlotter:
         combined[['resizeTrigger', 'sizeLimit']] = combined['reduce_triggerSz_sizeLim'].str.strip('()').str.split(',', expand=True).astype(int)
         combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
         combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
+        combined['time_norm'] = combined['sumtest_time_mean'] / combined['sumtest_time_mean'].max()
+        combined['coverage_norm'] = combined['result_coverage_mean'] / combined['result_coverage_mean'].max()
+        combined['efficiency'] = combined['coverage_norm'] / combined['time_norm']
         return combined
 
     def build_dist_str(self, df) -> str:

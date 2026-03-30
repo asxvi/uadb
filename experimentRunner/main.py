@@ -74,7 +74,7 @@ class ExperimentSettings:
     mult_size_range: tuple = (1,5)              # required 
     independent_variable: str = None            # flag for what var we test. Used internally
     start_interval_range: tuple = (interval_size_range[0], interval_size_range[1])   
-    reduce_triggerSz_sizeLim: tuple = (10,5)    # test this. need to figure out how to encode different techniques.
+    reduce_triggerSz_sizeLim: tuple = (10,5)    # (trigger size, size to reduce to)
     domain_max: int = None
     
     # use these value if not None, otherwise use tuple if not None, both none = error
