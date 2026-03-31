@@ -12,12 +12,12 @@ Naming convention is "GroupName/ID": {ExperimentGroup of related experiments}
 persists in namespace of caller program
 '''
 
-# # zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
-zipf = DistributionConfig(
-    distribution=DistributionType.ZIPFIAN,
-    pos_zipf_a=1.8,
-    width_zipf_a=1.5,
-)
+# # # zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
+# zipf = DistributionConfig(
+#     distribution=DistributionType.ZIPFIAN,
+#     pos_zipf_a=1.8,
+#     width_zipf_a=1.5,
+# )
 
 experiments = dict()
 
@@ -34,18 +34,20 @@ template = ExperimentSettings(
     gap_size_range=(0,100), 
     name= "temp",
     reduce_triggerSz_sizeLim=(10, 5),
-    distribution_config=zipf,
+    # distribution_config=zipf,
 )
 
-def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger_size: int = 10, reduce_to_size: int = 5, gap_width: int = 1):
+# def ni_gap_sweep_outlier(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger_size: int = 10, reduce_to_size: int = 5, gap_width: int = 1):
+def ni_gap_sweep_outlier(gap_sizes: list, ni_list: int, n: int, trigger_size, reduce_to_size, gap_width: int = 1):
     if n_list is None:
         n_list = []
 
     group = ExperimentGroup(f'ni_gap_red{trigger_size}_{reduce_to_size}_sweep', 'gap_size_range', None)
     
-    for n in n_list:
+    # for n in n_list:
+    if 1==1:
         for g in gap_sizes:
-            # for ni in range(1, max_ni+1):
+            # for ni in ni_list:
                 ni = 5
             
                 # gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 300_000)]
@@ -72,32 +74,32 @@ def ni_gap_sweep(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger
         
     return group
 
-def plot_ni_gap_sweep(max_ni: int, n_list: list, gap_sizes:list, suite_name: str = None):
-    suite_name = suite_name if suite_name is not None else f'ni_gap_sweeping{format_datasize(n_list[-1])}'
+def plot_ni_gap_sweep_outlier(ni_list: int, n_list: list, gap_sizes:list, suite_name: str = None):
+    suite_name = suite_name if suite_name is not None else f'ni_gap_sweep_outlier{format_datasize(n_list[-1])}'
     if suite_name not in experiments:
         experiments[suite_name] = ExperimentSuite(suite_name)
     
-    # red_params = [(15, 10), (10, 5), (4, 2), (9, 3), (5, 2), (1, 1), (3,1)
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 500, 250, 1000))
+    # experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 500, 100, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 500, 10, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 150, 100, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 150, 10, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 70, 50, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 70, 10, 1000))
 
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 250, 1000))
-    # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 100, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 500, 10, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 150, 100, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 150, 10, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 50, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 70, 10, 1000))
+    # experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 15, 10, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 10, 5, 1000))
+    # experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 4, 2, 1000))
+    # experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 9, 3, 1000))
+    # experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 5, 2, 1000))
+    experiments[suite_name].add(ni_gap_sweep_outlier(gap_sizes, ni_list, n_list, 3, 1, 1000))
 
-    # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 15, 10, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 10, 5, 1000))
-    # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 4, 2, 1000))
-    # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 9, 3, 1000))
-    # experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 5, 2, 1000))
-    experiments[suite_name].add(ni_gap_sweep(gap_sizes, max_ni, n_list, 3, 1, 1000))
 
+ni_list = make_log_sweep(1, 15, 8)
 n_list = make_log_sweep(1, 8000, 20)
-# gap_sizes = [2, 5, 10, 25, 35, 50]
 gap_sizes = [2, 5, 10, 25, 35, 50]
-plot_ni_gap_sweep(5, n_list, gap_sizes)
+
+plot_ni_gap_sweep_outlier(ni_list, n_list, gap_sizes)
 
 
 # bigger gaps

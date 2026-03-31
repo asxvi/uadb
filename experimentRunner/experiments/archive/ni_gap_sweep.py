@@ -26,10 +26,12 @@ template = ExperimentSettings(
     reduce_triggerSz_sizeLim=(10, 5),
 )
 
-def ni_sweep(ni_list: int, n: int, trigger_size, reduce_to_size):
+def ni_sweep(ni_list: int, gap_list: list, n: int, trigger_size, reduce_to_size):
     group = ExperimentGroup(f'ni{ni_list[-1]}_red{trigger_size}_{reduce_to_size}_sweep', 'num_intervals', None)
     
-    for ni in ni_list:
+    # for ni in ni_list:
+    for gap in gap_list:
+        ni = 5
         experiment = replace(
             template,
             dataset_size             = n,
@@ -38,7 +40,7 @@ def ni_sweep(ni_list: int, n: int, trigger_size, reduce_to_size):
             independent_variable     = 'num_intervals',
             interval_size_range      = (1, 100_000),
             start_interval_range     = (1, 1000),
-            gap_size_range           = (10000, 10001),
+            gap_size_range           = (gap, gap+1),
             interval_width_range     = (1, 2),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
@@ -49,20 +51,21 @@ def ni_sweep(ni_list: int, n: int, trigger_size, reduce_to_size):
 
     return group
 
+
 # ================ #
-def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
+def plot_ni_gap_sweep(ni_list: int, n: int, gap_list: list, suite_name: str = None):
     suite_name = suite_name if suite_name is not None else f'ni_sweeping{format_datasize(n)}'
     if suite_name not in experiments:
         experiments[suite_name] = ExperimentSuite(suite_name)
     
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 250))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 100))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 10))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 150, 100))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 150, 10))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 70, 50))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 15, 10))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 3, 1))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 500, 250))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 500, 100))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 500, 10))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 150, 100))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 150, 10))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 70, 50))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 15, 10))
+    experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 3, 1))
 
     # experiments[suite_name].add(ni_sweep(ni_list, n, 70, 10))
     # experiments[suite_name].add(ni_sweep(ni_list, n, 10, 5))
@@ -71,11 +74,18 @@ def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
     # experiments[suite_name].add(ni_sweep(ni_list, n, 5, 2))
 ## ============================== ##
 
+# plot_all_ni_sweep(10, 50, 'ni_sweepingn_50') 
+# plot_all_ni_sweep(10, 100, 'ni_sweepingn_100') 
+# plot_all_ni_sweep(10, 250, 'ni_sweepingn_250') 
+# plot_all_ni_sweep(10, 500, 'ni_sweepingn_500')
+
+
 # n_list = make_log_sweep(1, 1000, 20)
 ni_list = make_log_sweep(1, 15, 8)
 
-plot_ni_gap_sweep(ni_list, 100)
-plot_ni_gap_sweep(ni_list, 200)
-plot_ni_gap_sweep(ni_list, 400)
+gap_list = [1000, 2000, 5000, 10000, 100000]
+plot_ni_gap_sweep(ni_list, 100, gap_list)
+plot_ni_gap_sweep(ni_list, 200, gap_list)
+plot_ni_gap_sweep(ni_list, 400, gap_list)
 
 
