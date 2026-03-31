@@ -36,16 +36,20 @@ class StatisticsPlotter:
         self.iv = iv
 
         # plot stuff- uncomment for certain plots (some worse than others)
-        self.plot_time_coverage_by_reduce(df)
+        self.plot_time_coverage_by_gap(df)
         # self.plot_reduction_heatmap(df)
         self.plot_3_row_red_vs_TimeNCover(df)
         self.plot_convergence_coverage_vs_n(df)
         self.plot_convergence_vs_gap(df)
         # self.plot_gap_vs_time_vs_result_size(df)
         # self.plot_gap_vs_time_vs_underreduction(df)
-        self.plot_efficiency_vs_ni(df)
-        self.plot_time_vs_coverage_all_ni(df)
-        
+        # self.plot_efficiency_vs_ni(df)
+        # self.plot_time_vs_coverage_all_ni(df)
+        self.plot_efficiency_vs_iv(df)
+        self.plot_time_vs_coverage_all_iv(df)
+
+        self.plot_efficiency_vs_iv(df)
+    
         print("Results saved in: ", self.resultFilepath)
 
     # Not work
@@ -97,8 +101,8 @@ class StatisticsPlotter:
         plt.close()
         return outpath
     
-    def plot_time_coverage_by_reduce(self, df: pd.DataFrame) -> str:
-        ''' plot time and coverage vs reduce params '''
+    def plot_time_coverage_by_gap(self, df: pd.DataFrame) -> str:
+        ''' plot time and coverage vs gap '''
 
         indep_variable = self.iv
 
@@ -112,7 +116,7 @@ class StatisticsPlotter:
         fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
         for p, group in dfg:
             # Make sure each group is sorted by IV
-            group = group.sort_values(indep_variable)
+            group = group.sort_values('gap_size_range_tuple')
             x = group[indep_variable]
             y_time = group['sum_time_mean']
             y_time_err = group['sum_time_std']
@@ -489,7 +493,7 @@ class StatisticsPlotter:
             pdf.savefig(bbox_inches='tight')
             plt.close()
 
-    def plot_time_vs_coverage_all_ni(self, df, filename="time_vs_coverage.pdf"):
+    def plot_time_vs_coverage_all_ni(self, df, filename="time_vs_coverage_all_ni.pdf"):
         ''' plots 1 viz grouping by ni and red param. does not plot for each ni'''
 
         filename = f"{self.resultFilepath}/{filename}"
@@ -547,8 +551,126 @@ class StatisticsPlotter:
             plt.tight_layout()
             pdf.savefig(bbox_inches='tight')
             plt.close()
-
             
+    def plot_efficiency_vs_iv(self, df: pd.DataFrame, filename="efficiency_vs_iv.pdf"):
+        iv = self.iv 
+        filename = f"{self.resultFilepath}/{filename}"
+        
+        if iv == "gap_size" or iv == "gap_size_range":
+            iv = 'gap_size_range_tuple'
+
+        with PdfPages(filename) as pdf:
+            # heatmap: reduce_triggers(x) vs IV(y)
+            pivot_eff = df.pivot_table(
+                index=iv,
+                columns='reduce_triggerSz_sizeLim',
+                values='efficiency',
+                aggfunc='mean'
+            )
+            plt.figure(figsize=(6,3))
+            sns.heatmap(pivot_eff, annot=True, fmt=".2f", cmap="coolwarm", annot_kws={"size": 6})
+            plt.title("Efficiency (coverage_norm/time_norm)")
+            plt.xlabel("reduce_triggerSz_sizeLim")
+            plt.ylabel(iv)
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+            
+            iv_values = sorted(df[iv].unique())
+            red_configs = sorted(df['reduce_triggerSz_sizeLim'].unique())
+            fig, axes = plt.subplots(1, len(iv_values), figsize=(4*len(iv_values), 3))
+            axes = axes.flatten() if len(iv_values) > 1 else [axes]
+            fig.text(0.5, 0.05, self.param_str, ha='center', va='center', fontsize=7, color='black', wrap=True)
+
+            handles, labels = None, None
+            for i, val in enumerate(iv_values):
+                ax = axes[i]
+                sub_df = df[df[iv] == val]
+                for r in red_configs:
+                    r_df = sub_df[sub_df['reduce_triggerSz_sizeLim'] == r]
+                    ax.scatter(r_df['time_norm'], r_df['coverage_norm'], label=str(r), s=50)
+
+                if handles is None:
+                    handles, labels = ax.get_legend_handles_labels()
+
+                ax.set_title(f'{iv}={val}')
+                ax.set_xlabel('relative time')
+                ax.set_ylabel('relative coverage')
+                ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+                ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+                ax.grid(True, alpha=0.3)
+
+            plt.tight_layout(rect=[0, 0.08, 0.85, 1])
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+            fig = plt.figure(figsize=(6,2))
+            fig.legend(handles, labels, title='(trigger, size_limit)', loc='center', fontsize=8)
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+    def plot_time_vs_coverage_all_iv(self, df, filename="time_vs_coverage_all_rv.pdf"):
+        ''' plots 1 viz grouping by ni and red param. does not plot for each ni'''
+
+        iv = self.iv
+        if iv == "gap_size" or iv == "gap_size_range":
+            iv = 'gap_size_range_tuple'
+
+        filename = f"{self.resultFilepath}/{filename}"
+        agg_df = df.groupby(['num_intervals', 'reduce_triggerSz_sizeLim']).agg({
+            'time_norm': 'mean',
+            'coverage_norm': 'mean'
+        }).reset_index()
+
+        with PdfPages(filename) as pdf:
+            fig, ax = plt.subplots(figsize=(8, 5))
+
+            sns.scatterplot(
+                data=agg_df,
+                x='time_norm',
+                y='coverage_norm',
+                hue='reduce_triggerSz_sizeLim',
+                style='num_intervals',
+                s=60,
+                ax=ax
+            )
+
+            ax.set_xlabel("Relative Time")
+            ax.set_ylabel("Relative Coverage")
+            ax.set_title("Time vs Coverage (all num_intervals)")
+            ax.grid(alpha=0.3)
+            ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+            ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+            ax.legend(title='ni / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
+
+            plt.tight_layout()
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.scatterplot(
+                data=agg_df,
+                x='time_norm',
+                y='coverage_norm',
+                hue='reduce_triggerSz_sizeLim',
+                # style='num_intervals',
+                s=60,
+                ax=ax
+            )
+
+            ax.set_xlabel("Relative Time")
+            ax.set_ylabel("Relative Coverage")
+            ax.set_title("Time vs Coverage (all num_intervals)")
+            ax.grid(alpha=0.3)
+            ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+            ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
+            ax.legend(title='ni / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
+            
+            fig.text(0.5, 0.05, self.param_str, ha='center', va='center', fontsize=7, color='black', wrap=True)
+
+            plt.tight_layout()
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
     # ----------------------------------  
     # --- helpers ---
     # ----------------------------------

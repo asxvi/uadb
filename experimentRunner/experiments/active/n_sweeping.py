@@ -66,10 +66,10 @@ def plot_all_n_sweep(n:int, step:int, suite_name:str = None):
     suite = experiments[suite_name]
     
     
+    suite.add(static_n_sweep(n, step, 15, 10))
     # suite.add(static_n_sweep(n, step, 500, 10))
     # suite.add(static_n_sweep(n, step, 150, 10))
     # suite.add(static_n_sweep(n, step, 50, 10))
-    suite.add(static_n_sweep(n, step, 15, 10))
     # suite.add(static_n_sweep(n, step, 10, 5))
     # suite.add(static_n_sweep(n, step, 4, 2))
     # suite.add(static_n_sweep(n, step, 9, 3))
