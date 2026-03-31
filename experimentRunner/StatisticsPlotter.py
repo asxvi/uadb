@@ -47,8 +47,6 @@ class StatisticsPlotter:
         # self.plot_time_vs_coverage_all_ni(df)
         self.plot_efficiency_vs_iv(df)
         self.plot_time_vs_coverage_all_iv(df)
-
-        self.plot_efficiency_vs_iv(df)
     
         print("Results saved in: ", self.resultFilepath)
 
@@ -264,9 +262,10 @@ class StatisticsPlotter:
 
         return self.save_fig(fig, f'convergence_coverage_vs_n_{self.master_seed}')
 
-    def plot_convergence_vs_gap(self, df: pd.DataFrame) -> str:
+    def plot_convergence_vs_gap(self, df: pd.DataFrame, filename="convergence_vs_gap.pdf") -> str:
         '''find when certain gap size ceonverge at what N '''
 
+        filename = f"{self.resultFilepath}/{filename}"
         iv = self.iv
         if iv != 'gap_size' and iv != 'gap_size_range':
             return
@@ -277,46 +276,129 @@ class StatisticsPlotter:
             .drop_duplicates()
             .itertuples(index=False, name=None)
         )
-        
-        fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
-        fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
 
-        if len(gaps) == 1:
-            axes = [axes]
+        with PdfPages(filename) as pdf:
+            fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
+            fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
+
+            if len(gaps) == 1:
+                axes = [axes]
+                
+            for i, gap in enumerate(gaps):
+                ax = axes[i]
+                gap_df = df[df['gap_size_range_tuple'] == gap]
+
+                for trigger, size_limit in reduce_params:
+                    subdf = gap_df[
+                        (gap_df['resizeTrigger'] == trigger) &
+                        (gap_df['sizeLimit'] == size_limit)
+                    ].sort_values('dataset_size')
+
+                    if subdf.empty:
+                        continue
+
+                    ax.plot(
+                        subdf['dataset_size'],
+                        subdf['minEffectiveIntervalCountMean'],
+                        marker='o',
+                        label=f'({trigger}, {size_limit})'
+                    )
+
+                ax.set_xlabel("Dataset Size (n)")
+                ax.set_ylabel("Min Effective Interval Count")
+                ax.set_title(f"Gap={gap}")
+                ax.grid(True)
             
-        for i, gap in enumerate(gaps):
-            ax = axes[i]
-            gap_df = df[df['gap_size_range_tuple'] == gap]
+            axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+            # plt.show()
+            # outfile = f'convergence_vs_gap_{self.master_seed}'
+            # outpath = f"{self.resultFilepath}/{outfile}"
+            # plt.savefig(outpath, dpi=300, bbox_inches='tight')
+            plt.tight_layout()
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
 
-            for trigger, size_limit in reduce_params:
-                subdf = gap_df[
-                    (gap_df['resizeTrigger'] == trigger) &
-                    (gap_df['sizeLimit'] == size_limit)
-                ].sort_values('dataset_size')
+            fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
+            fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
 
-                if subdf.empty:
-                    continue
+            if len(gaps) == 1:
+                axes = [axes]
+                
+            for i, gap in enumerate(gaps):
+                ax = axes[i]
+                gap_df = df[df['gap_size_range_tuple'] == gap]
 
-                ax.plot(
-                    subdf['dataset_size'],
-                    subdf['minEffectiveIntervalCountMean'],
-                    marker='o',
-                    label=f'({trigger}, {size_limit})'
-                )
+                for trigger, size_limit in reduce_params:
+                    subdf = gap_df[
+                        (gap_df['resizeTrigger'] == trigger) &
+                        (gap_df['sizeLimit'] == size_limit)
+                    ].sort_values('dataset_size')
 
-            ax.set_xlabel("Dataset Size (n)")
-            ax.set_ylabel("Min Effective Interval Count")
-            ax.set_title(f"Gap={gap}")
-            ax.grid(True)
-        
-        axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
-        plt.tight_layout()
-        # plt.show()
-        outfile = f'convergence_vs_gap_{self.master_seed}'
-        outpath = f"{self.resultFilepath}/{outfile}"
-        plt.savefig(outpath, dpi=300, bbox_inches='tight')
-        plt.close()
-        return outpath
+                    if subdf.empty:
+                        continue
+
+                    ax.plot(
+                        subdf['dataset_size'],
+                        subdf['coverage_norm'],
+                        marker='o',
+                        label=f'({trigger}, {size_limit})'
+                    )
+
+                ax.set_xlabel("Dataset Size (n)")
+                ax.set_ylabel("coverage_normalized")
+                ax.set_title(f"Gap={gap}")
+                ax.grid(True)
+            
+            axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+            # plt.show()
+            # outfile = f'convergence_vs_gap_{self.master_seed}'
+            # outpath = f"{self.resultFilepath}/{outfile}"
+            # plt.savefig(outpath, dpi=300, bbox_inches='tight')
+            plt.tight_layout()
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+
+
+            fig, axes = plt.subplots(1, len(gaps), figsize=(6 * len(gaps), 5))
+            fig.text(0.5, -0.02, self.param_str, ha='center', fontsize=7, color='black')
+
+            if len(gaps) == 1:
+                axes = [axes]
+                
+            for i, gap in enumerate(gaps):
+                ax = axes[i]
+                gap_df = df[df['gap_size_range_tuple'] == gap]
+
+                for trigger, size_limit in reduce_params:
+                    subdf = gap_df[
+                        (gap_df['resizeTrigger'] == trigger) &
+                        (gap_df['sizeLimit'] == size_limit)
+                    ].sort_values('dataset_size')
+
+                    if subdf.empty:
+                        continue
+
+                    ax.plot(
+                        subdf['dataset_size'],
+                        subdf['result_coverage_mean'],
+                        marker='o',
+                        label=f'({trigger}, {size_limit})'
+                    )
+
+                ax.set_xlabel("Dataset Size (n)")
+                ax.set_ylabel("coverage_mean")
+                ax.set_title(f"Gap={gap}")
+                ax.grid(True)
+            
+            axes[-1].legend(title='(trigger, size_limit)',loc='center left', bbox_to_anchor=(1.0, 0.5), fontsize=8)
+            # plt.show()
+            # outfile = f'convergence_vs_gap_{self.master_seed}'
+            # outpath = f"{self.resultFilepath}/{outfile}"
+            # plt.savefig(outpath, dpi=300, bbox_inches='tight')
+            plt.tight_layout()
+            pdf.savefig(bbox_inches='tight')
+            plt.close()
+            # return outpath
 
     def plot_gap_vs_time_vs_result_size(self, df: pd.DataFrame) -> str:
         '''1 x n plot of time vs result_size per gap size, one point per reduction config'''
@@ -556,7 +638,8 @@ class StatisticsPlotter:
         iv = self.iv 
         filename = f"{self.resultFilepath}/{filename}"
         
-        if iv == "gap_size" or iv == "gap_size_range":
+        # if iv == "gap_size" or iv == "gap_size_range":
+        if iv == "gap_size_range":
             iv = 'gap_size_range_tuple'
 
         with PdfPages(filename) as pdf:
@@ -612,11 +695,12 @@ class StatisticsPlotter:
         ''' plots 1 viz grouping by ni and red param. does not plot for each ni'''
 
         iv = self.iv
-        if iv == "gap_size" or iv == "gap_size_range":
+        # if iv == "gap_size" or iv == "gap_size_range":
+        if iv == "gap_size_range":
             iv = 'gap_size_range_tuple'
 
         filename = f"{self.resultFilepath}/{filename}"
-        agg_df = df.groupby(['num_intervals', 'reduce_triggerSz_sizeLim']).agg({
+        agg_df = df.groupby([iv, 'reduce_triggerSz_sizeLim']).agg({
             'time_norm': 'mean',
             'coverage_norm': 'mean'
         }).reset_index()
@@ -629,7 +713,7 @@ class StatisticsPlotter:
                 x='time_norm',
                 y='coverage_norm',
                 hue='reduce_triggerSz_sizeLim',
-                style='num_intervals',
+                style=iv,
                 s=60,
                 ax=ax
             )
@@ -640,7 +724,7 @@ class StatisticsPlotter:
             ax.grid(alpha=0.3)
             ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
             ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
-            ax.legend(title='ni / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
+            ax.legend(title='iv / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
 
             plt.tight_layout()
             pdf.savefig(bbox_inches='tight')
@@ -663,7 +747,7 @@ class StatisticsPlotter:
             ax.grid(alpha=0.3)
             ax.xaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
             ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=False, useOffset=False))
-            ax.legend(title='ni / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
+            ax.legend(title='iv / red', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
             
             fig.text(0.5, 0.05, self.param_str, ha='center', va='center', fontsize=7, color='black', wrap=True)
 

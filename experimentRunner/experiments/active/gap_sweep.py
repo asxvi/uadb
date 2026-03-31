@@ -38,9 +38,9 @@ def ni_sweep(ni_list: int, gap_list: list, n: int, trigger_size, reduce_to_size)
             uncertain_ratio          = 0.0,
             independent_variable     = 'gap_size_range',
             interval_size_range      = (1, 100_000),
-            start_interval_range     = (1, 1000),
-            gap_size_range           = (gap, gap*3),
-            interval_width_range     = (1, 2),
+            start_interval_range     = (1, 10000),
+            gap_size_range           = (gap, gap+1),
+            interval_width_range     = (5, 6),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
         )
@@ -68,19 +68,12 @@ def plot_ni_gap_sweep(ni_list: int, n: int, gap_list: list, suite_name: str = No
     experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 15, 10))
     experiments[suite_name].add(ni_sweep(ni_list, gap_list, n, 3, 1))
 
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 70, 10))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 10, 5))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 4, 2))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 9, 3))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 5, 2))
-## ============================== ##
 
 # n_list = make_log_sweep(1, 1000, 20)
 ni_list = make_log_sweep(1, 15, 8)
+g = 1000
+gap_list = [g*1, g*5, g*10, g*20, g*100]
 
-gap_list = [1000, 2000, 5000, 10000, 100000]
 plot_ni_gap_sweep(ni_list, 100, gap_list)
 plot_ni_gap_sweep(ni_list, 200, gap_list)
 plot_ni_gap_sweep(ni_list, 400, gap_list)
-
-

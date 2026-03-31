@@ -37,16 +37,17 @@ def make_gap_sequence(ni: int, base_gap: int, n_outliers: int = 1, outlier_scale
 
 
 def ni_sweep(ni_list: int, n: int, trigger_size, reduce_to_size):
-    group = ExperimentGroup(f'ni{ni_list[-1]}_red{trigger_size}_{reduce_to_size}_sweep', 'num_intervals', None)
+    group = ExperimentGroup(f'ni{ni_list[-1]}_red{trigger_size}_{reduce_to_size}_sweep', 'gap_size_range', None)
     
     # for ni in ni_list:
     # if 1 == 1:
     for num_out in [0,1,2]:
-        ni = 5
         g = 2
+        ni = 5
 
-        # gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 50000)]
-        gap_sequence = sorted(make_gap_sequence(5, base_gap=2, n_outliers=num_out))
+        gap_sequence = [g] * (ni-2) + [g**3 + np.random.randint(1, 50000)]
+        # gap_sequence = sorted(make_gap_sequence(5, base_gap=2, n_outliers=num_out))
+        print(gap_sequence)
 
         experiment = replace(
             template,
@@ -80,14 +81,9 @@ def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
     experiments[suite_name].add(ni_sweep(ni_list, n, 500, 10))
     experiments[suite_name].add(ni_sweep(ni_list, n, 150, 100))
     experiments[suite_name].add(ni_sweep(ni_list, n, 150, 10))
-
     experiments[suite_name].add(ni_sweep(ni_list, n, 70, 50))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 70, 10))
     experiments[suite_name].add(ni_sweep(ni_list, n, 15, 10))
     experiments[suite_name].add(ni_sweep(ni_list, n, 10, 5))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 4, 2))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 9, 3))
-    # experiments[suite_name].add(ni_sweep(ni_list, n, 5, 2))
     experiments[suite_name].add(ni_sweep(ni_list, n, 3, 1))
 ## ============================== ##
 
