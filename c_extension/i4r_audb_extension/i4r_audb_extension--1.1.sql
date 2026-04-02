@@ -429,17 +429,46 @@ RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_set_or'
 LANGUAGE C STRICT;
 
-
-CREATE FUNCTION prune_set_lt_logn(a int4range[], b int4range[], direction boolean) 
-RETURNS int4range[]
-AS 'MODULE_PATHNAME', 'prune_set_lt_logn'
-LANGUAGE C STRICT;
-
-
-
 select 
-    prune_set_lt_logn(
+    set_normalize(array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)]),
+    set_normalize(array[int4range(2,5), int4range(5,10), int4range(7,14)]),
+    prune_set_lt(
         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
         array[int4range(2,5), int4range(5,10), int4range(7,14)],
         false
+    ),
+    prune_set_lt(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        true
+    ),
+    prune_set_lte(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        false
+    ),
+    prune_set_lte(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        true
+    ),
+    prune_set_gt(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        false
+    ),
+    prune_set_gt(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        true
+    ),
+    prune_set_gte(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        false
+    ),
+    prune_set_gte(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        true
     );

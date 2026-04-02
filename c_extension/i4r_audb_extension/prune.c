@@ -183,141 +183,9 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
     return normalize(result);
 }
 
-// finds the complement of the 1 range. results in 2 disjoint sets
-Int4RangeSet prune_NOT_internal_range(Int4Range a) {
-    Int4RangeSet result;
-    Int4Range left, right;
-
-    result.count = 0;
-    result.containsNull = false;
-    result.ranges = (Int4Range*) malloc(sizeof(Int4Range) * 2);
-
-    // Left range
-    if (a.lower > INT32_MIN) {
-        left.lower = INT32_MIN;
-        left.upper = a.lower - 1;
-        left.isNull = false;
-        result.ranges[result.count++] = left;
-    }
-
-    // Right range
-    if (a.upper < INT32_MAX) {
-        right.lower = a.upper;
-        right.upper = INT32_MAX;
-        right.isNull = false;
-        result.ranges[result.count++] = right;
-    }
-
-    return result;
-}
-
 //////////////////////////
 ////////// SET ///////////
 //////////////////////////
-
-// handles strict less than: e1 < e2 for sets
-Int4RangeSet prune_lt_set_internal(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
-    Int4Range temp;
-    int maxSize, i, j;
-    
-    result.count = 0;
-    result.containsNull = false;
-    
-    // worst case: every pair produces a range
-    maxSize = a.count * b.count;
-    result.ranges = palloc(sizeof(Int4Range) * maxSize);
-
-    for (i = 0; i < a.count; i++) {
-        for (j = 0; j < b.count; j++) {
-            temp = prune_lt_internal_range(a.ranges[i], b.ranges[j], false);
-
-            if (!temp.isNull) {
-                result.ranges[result.count++] = temp;
-            }
-        }
-    }
-
-    return normalize(result);
-}
-
-// andles strict less than or equal: e1 < e2
-Int4RangeSet prune_lte_set_internal(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
-    Int4Range temp;
-    int maxSize, i, j;
-    
-    result.count = 0;
-    result.containsNull = false;
-    
-    // worst case: every pair produces a range
-    maxSize = a.count * b.count;
-    result.ranges = palloc(sizeof(Int4Range) * maxSize);
-
-    for (i = 0; i < a.count; i++) {
-        for (j = 0; j < b.count; j++) {
-            temp = prune_lte_internal_range(a.ranges[i], b.ranges[j], false);
-
-            if (!temp.isNull) {
-                result.ranges[result.count++] = temp;
-            }
-        }
-    }
-
-    return normalize(result);
-}
-
-// handles strict greater than: e1 > e2 for sets
-Int4RangeSet prune_gt_set_internal(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
-    Int4Range temp;
-    int maxSize, i, j;
-    
-    result.count = 0;
-    result.containsNull = false;
-    
-    // worst case: every pair produces a range
-    maxSize = a.count * b.count;
-    result.ranges = palloc(sizeof(Int4Range) * maxSize);
-
-    for (i = 0; i < a.count; i++) {
-        for (j = 0; j < b.count; j++) {
-            temp = prune_gt_internal_range(a.ranges[i], b.ranges[j], false);
-
-            if (!temp.isNull) {
-                result.ranges[result.count++] = temp;
-            }
-        }
-    }
-
-    return normalize(result);
-}
-
-// handles strict greater than or equal: e1 > e2 for sets
-Int4RangeSet prune_gte_set_internal(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
-    Int4Range temp;
-    int maxSize, i, j;
-    
-    result.count = 0;
-    result.containsNull = false;
-    
-    // worst case: every pair produces a range
-    maxSize = a.count * b.count;
-    result.ranges = palloc(sizeof(Int4Range) * maxSize);
-
-    for (i = 0; i < a.count; i++) {
-        for (j = 0; j < b.count; j++) {
-            temp = prune_gte_internal_range(a.ranges[i], b.ranges[j], false);
-
-            if (!temp.isNull) {
-                result.ranges[result.count++] = temp;
-            }
-        }
-    }
-
-    return normalize(result);
-}
 
 // all points of intersection fpr set. both sides shrink
 // pairwise intersection
@@ -352,20 +220,20 @@ Int4RangeSet prune_AND_internal_set(Int4RangeSet a, Int4RangeSet b) {
 }
 
 // concat and normalize
+// O(NlogN)
 Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
     Int4RangeSet result;
 
     result.count = 0;
     result.containsNull = a.containsNull || b.containsNull;
-
     result.ranges = palloc(sizeof(Int4Range) * (a.count + b.count));
 
-    // copy A
+    // copy a
     for (int i = 0; i < a.count; i++) {
         result.ranges[result.count++] = a.ranges[i];
     }
 
-    // copy B 
+    // copy b 
     for (int i = 0; i < b.count; i++) {
         result.ranges[result.count++] = b.ranges[i];
     }
@@ -373,41 +241,8 @@ Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
     return normalize(result);
 }
 
-// or compute pairwise union and concat. explodes of course
-// Int4RangeSet prune_OR_internal_range(Int4RangeSet a, Int4RangeSet b) {
-//     Int4RangeSet result, temp;
-//     int maxSize, i, j, k;
-
-//     result.count = 0;
-//     result.containsNull = false;
-
-//     maxSize = 2 * a.count * b.count;
-//     result.ranges = palloc(sizeof(Int4Range) * maxSize);
-    
-//     for (i = 0; i < a.count; i++) {
-//         for (j = 0; j < b.count; j++) {
-//             temp = union_set(a.ranges[i], b.ranges[j]);
-
-//             for (k = 0; k < temp.count; k++) {
-//                 if (!temp.ranges[k].isNull) {
-//                     result.ranges[result.count++] = temp.ranges[k];
-//                 }
-//             }
-//         }
-//     }
-//     return normalize(result);
-// }
-
-
-
-
-
-
-
-
-
 // handles strict less than: e1 < e2 for sets
-Int4RangeSet prune_lt_set_internal_nlogn(Int4RangeSet a, Int4RangeSet b, bool direction) {
+Int4RangeSet prune_lt_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
     Int4RangeSet result;
     Int4RangeSet norm_a;
     Int4RangeSet norm_b;
@@ -443,6 +278,159 @@ Int4RangeSet prune_lt_set_internal_nlogn(Int4RangeSet a, Int4RangeSet b, bool di
         // constrain b: mirror — advance pb on valid, advance pa on null
         while (pa < norm_a.count && pb < norm_b.count) {
             temp = prune_lt_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 1);
+
+            if (temp.isNull) {
+                // a[pa] is too far left to constrain b[pb], move a forward
+                pa++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pb++;
+            }
+        }
+    }
+
+    return normalize(result);
+}
+
+// handles less than equal: e1 <= e2 for sets
+Int4RangeSet prune_lte_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
+    Int4RangeSet result;
+    Int4RangeSet norm_a;
+    Int4RangeSet norm_b;
+    Int4Range temp;
+    int pa;
+    int pb;
+
+    result.count = 0;
+    result.containsNull = false;
+
+    // O(NlogN)
+    norm_a = normalize(a);
+    norm_b = normalize(b);
+    pa = 0;
+    pb = 0;
+
+    result.ranges = palloc(sizeof(Int4Range) * (norm_a.count + norm_b.count));
+
+    if (direction == 0) {
+        // advance pa on valid, advance pb on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_lte_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 0);
+
+            if (temp.isNull) {
+                // b[pb] is too far left to constrain a[pa], move b forward
+                pb++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pa++;
+            }
+        }
+    } else {
+        // constrain b: mirror — advance pb on valid, advance pa on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_lte_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 1);
+
+            if (temp.isNull) {
+                // a[pa] is too far left to constrain b[pb], move a forward
+                pa++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pb++;
+            }
+        }
+    }
+
+    return normalize(result);
+}
+
+// handles less than equal: e1 <= e2 for sets
+Int4RangeSet prune_gt_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
+    Int4RangeSet result;
+    Int4RangeSet norm_a;
+    Int4RangeSet norm_b;
+    Int4Range temp;
+    int pa;
+    int pb;
+
+    result.count = 0;
+    result.containsNull = false;
+
+    // O(NlogN)
+    norm_a = normalize(a);
+    norm_b = normalize(b);
+    pa = 0;
+    pb = 0;
+
+    result.ranges = palloc(sizeof(Int4Range) * (norm_a.count + norm_b.count));
+
+    if (direction == 0) {
+        // advance pa on valid, advance pb on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_gt_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 0);
+
+            if (temp.isNull) {
+                // b[pb] is too far left to constrain a[pa], move b forward
+                pb++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pa++;
+            }
+        }
+    } else {
+        // constrain b: mirror — advance pb on valid, advance pa on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_gt_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 1);
+
+            if (temp.isNull) {
+                // a[pa] is too far left to constrain b[pb], move a forward
+                pa++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pb++;
+            }
+        }
+    }
+
+    return normalize(result);
+}
+
+// handles less than equal: e1 <= e2 for sets
+Int4RangeSet prune_gte_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
+    Int4RangeSet result;
+    Int4RangeSet norm_a;
+    Int4RangeSet norm_b;
+    Int4Range temp;
+    int pa;
+    int pb;
+
+    result.count = 0;
+    result.containsNull = false;
+
+    // O(NlogN)
+    norm_a = normalize(a);
+    norm_b = normalize(b);
+    pa = 0;
+    pb = 0;
+
+    result.ranges = palloc(sizeof(Int4Range) * (norm_a.count + norm_b.count));
+
+    if (direction == 0) {
+        // advance pa on valid, advance pb on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_gte_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 0);
+
+            if (temp.isNull) {
+                // b[pb] is too far left to constrain a[pa], move b forward
+                pb++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pa++;
+            }
+        }
+    } else {
+        // constrain b: mirror — advance pb on valid, advance pa on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_gte_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 1);
 
             if (temp.isNull) {
                 // a[pa] is too far left to constrain b[pb], move a forward
