@@ -10,7 +10,12 @@
 #define INT_MIN_LOCAL INT32_MIN
 #define INT_MAX_LOCAL INT32_MAX
 
+//////////////////////////
+////////// Range /////////
+//////////////////////////
+
 // handles strict less than: e1 < e2
+// returns the proper range depending on direction 
 Int4Range prune_lt_internal_range(Int4Range a, Int4Range b, bool direction) {
     Int4Range result;
     result.isNull = false;
@@ -28,9 +33,10 @@ Int4Range prune_lt_internal_range(Int4Range a, Int4Range b, bool direction) {
         bound.lower = a.lower + 1;  // [min(a)+1, +inf]
         bound.upper = INT32_MAX;
         bound.isNull = false;
-        result = intersect_range(b, bound);
+        result = intersect_range(b, bound); // returns isNull on invalid range, but we check this expicilty regardless
     }
 
+    // maybe invalidate solution also if either bound is int min/max, but this should automatically solve in intersect function
     if (!validRange(result)) result.isNull = true;
     return result;
 }
@@ -130,9 +136,6 @@ Int4Range prune_eq_internal_range(Int4Range a, Int4Range b) {
 Int4Range prune_AND_internal_range(Int4Range a, Int4Range b) {
     return prune_eq_internal_range(a, b);
 }
-// evaluate the expressions first, and then feed them into prune_and_internal_range()
-// Int4Range prune_and_internal_range_expr(Int4Range a, Int4Range b) {    
-// }
 
 // combines all ranges into a set. Returns at most size 2 set
 Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
@@ -207,6 +210,10 @@ Int4RangeSet prune_NOT_internal_range(Int4Range a) {
 
     return result;
 }
+
+//////////////////////////
+////////// SET ///////////
+//////////////////////////
 
 // handles strict less than: e1 < e2 for sets
 Int4RangeSet prune_lt_set_internal(Int4RangeSet a, Int4RangeSet b) {
@@ -358,7 +365,7 @@ Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
         result.ranges[result.count++] = a.ranges[i];
     }
 
-    // copy B
+    // copy B 
     for (int i = 0; i < b.count; i++) {
         result.ranges[result.count++] = b.ranges[i];
     }
@@ -390,3 +397,62 @@ Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
 //     }
 //     return normalize(result);
 // }
+
+
+
+
+
+
+
+
+
+// handles strict less than: e1 < e2 for sets
+Int4RangeSet prune_lt_set_internal_nlogn(Int4RangeSet a, Int4RangeSet b, bool direction) {
+    Int4RangeSet result;
+    Int4RangeSet norm_a;
+    Int4RangeSet norm_b;
+    Int4Range temp;
+    int pa;
+    int pb;
+
+    result.count = 0;
+    result.containsNull = false;
+
+    // O(NlogN)
+    norm_a = normalize(a);
+    norm_b = normalize(b);
+    pa = 0;
+    pb = 0;
+
+    result.ranges = palloc(sizeof(Int4Range) * (norm_a.count + norm_b.count));
+
+    if (direction == 0) {
+        // advance pa on valid, advance pb on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_lt_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 0);
+
+            if (temp.isNull) {
+                // b[pb] is too far left to constrain a[pa], move b forward
+                pb++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pa++;
+            }
+        }
+    } else {
+        // constrain b: mirror — advance pb on valid, advance pa on null
+        while (pa < norm_a.count && pb < norm_b.count) {
+            temp = prune_lt_internal_range(norm_a.ranges[pa], norm_b.ranges[pb], 1);
+
+            if (temp.isNull) {
+                // a[pa] is too far left to constrain b[pb], move a forward
+                pa++;
+            } else {
+                result.ranges[result.count++] = temp;
+                pb++;
+            }
+        }
+    }
+
+    return normalize(result);
+}

@@ -20,4 +20,5 @@ Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_AND_internal_set(Int4RangeSet a, Int4RangeSet b);
 Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b);
 
+Int4RangeSet prune_lt_set_internal_nlogn(Int4RangeSet a, Int4RangeSet b, bool direction);
 #endif

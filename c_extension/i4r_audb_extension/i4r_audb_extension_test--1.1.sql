@@ -269,16 +269,17 @@ CREATE TEMP TABLE t7_r_special (
 DROP TABLE IF EXISTS tX_s_agg_data_no_overlap;
 CREATE TEMP TABLE tX_s_agg_data_no_overlap (
     id int GENERATED ALWAYS AS IDENTITY,
+    agg_val int,
     val int4range[],
     mult int4range
 );
 
-INSERT INTO tX_s_agg_data_no_overlap (val, mult) VALUES
-    (array[int4range(1,3), int4range(6,10), int4range(20,30)], int4range(1,4)),
-    (array[int4range(100,1000), int4range(600,1500)], int4range(1,4)),
-    (array[int4range(10000,12000), int4range(15000,16200)], int4range(1,2)),
-    (array[int4range(100000,200000), int4range(300000,400000)], int4range(1,2));
-
+INSERT INTO tX_s_agg_data_no_overlap (agg_val, val, mult) VALUES
+    (1, array[int4range(1,3), int4range(6,10), int4range(20,30)], int4range(1,4)),
+    (1, array[int4range(100,1000), int4range(600,1500)], int4range(1,4)),
+    (2, array[int4range(10000,12000), int4range(15000,16200)], int4range(1,2)),
+    (3, array[int4range(10000,12000), int4range(15000,16200)], int4range(1,2)),
+    (2, array[int4range(100000,200000), int4range(300000,400000)], int4range(1,2));
 
 DROP TABLE IF EXISTS tX_superWide2;
 CREATE TEMP TABLE tX_superWide2 (

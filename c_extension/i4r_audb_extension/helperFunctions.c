@@ -224,7 +224,7 @@ static int q_sort_compare_ranges(const void* range1, const void* range2){
   return r1.upper < r2.upper ? -1 : 1;
 }
 
-// Allocates space for new array that is sorted on 1)lower, 2)upper using quicksort
+// Allocates space for new array that is sorted on [1)lower, 2)upper] using quicksort
 // prefilers result removing all potential NULLs. Then sorts.
 // returns sorted array with NULL appended if necessary.
 Int4RangeSet sort(Int4RangeSet vals){
@@ -271,9 +271,8 @@ Int4RangeSet sort(Int4RangeSet vals){
   return sorted;
 }
 
-// Traverses through entire set and looks to merge any possible overlap.
-// Allocates space for new array 
-// Confusion: should it be strict overlap vs adjacancy: {[1,3) (3, 6]} => {(1,6]} ???
+// Traverses through entire set and looks to greedily merge any possible overlap.
+// returns newly allocated set. At the least, result is sorted, at the most its reduced and merged into a 1 range set
 Int4RangeSet normalize(Int4RangeSet vals){
   Int4RangeSet normalized;
   Int4RangeSet sorted;
@@ -281,6 +280,7 @@ Int4RangeSet normalize(Int4RangeSet vals){
   size_t i;
   bool hadNull;
 
+  // 4/1/26, do not recall difference between count=0 vs isNULL. Empty vs NULL?
   if (vals.count == 0){
     normalized.count = 0;
     normalized.ranges = NULL;
@@ -288,14 +288,15 @@ Int4RangeSet normalize(Int4RangeSet vals){
     return normalized;
   }
   
+  // quicksort
   sorted = sort(vals);
-  
+
   hadNull = sorted.containsNull;
-  // remove null is present
   if (hadNull) {
     sorted = filterOutNulls(sorted);
   }
 
+  // otherwise malloc largest size
   normalized.count = 0;
   normalized.ranges = malloc(sizeof(Int4Range) * sorted.count);
   normalized.containsNull = false;
@@ -303,6 +304,7 @@ Int4RangeSet normalize(Int4RangeSet vals){
   prev = sorted.ranges[0];
   prev.isNull = false;
 
+  // traverse once and merge any overlap, and fully append any non overlap
   for(i=1; i<sorted.count; i++){
     Int4Range curr;
     curr = sorted.ranges[i];
@@ -318,8 +320,7 @@ Int4RangeSet normalize(Int4RangeSet vals){
       prev = curr;
     }
   }
-  
-  // account for last range
+  // account for last range and append
   normalized.ranges[normalized.count++] = prev;
   
   // account for null 
@@ -444,8 +445,8 @@ Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep){
   return sortedInput;
 }
 
-// removes any NULLs in the set. returns a set that with containsNULL = false.
-// set no longer knows it contains nulls; this must be tracked when called.
+// removes any NULLs in the set. returns a malloc'd set with containsNULL = false.
+// set no longer knows it contains nulls; this must be tracked and known with caller when called.
 Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   Int4RangeSet filteredVals;
   size_t nonNullCount;
@@ -631,7 +632,7 @@ Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep){
   return sortedInput;
 }
 
-// intersection between 2 ranges
+// intersection between 2 ranges. handles disjoint by returning isNull flag == invalid range
 Int4Range intersect_range(Int4Range a, Int4Range b) {
   Int4Range result;
   result.isNull = false;

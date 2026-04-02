@@ -428,3 +428,18 @@ CREATE FUNCTION prune_set_or(a int4range[], b int4range[])
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_set_or'
 LANGUAGE C STRICT;
+
+
+CREATE FUNCTION prune_set_lt_logn(a int4range[], b int4range[], direction boolean) 
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'prune_set_lt_logn'
+LANGUAGE C STRICT;
+
+
+
+select 
+    prune_set_lt_logn(
+        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+        array[int4range(2,5), int4range(5,10), int4range(7,14)],
+        false
+    );

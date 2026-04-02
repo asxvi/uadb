@@ -9,7 +9,6 @@
 #include "catalog/namespace.h"  // type helpers
 #include "funcapi.h"
 
-
 // local code
 #include "arithmetic.h"         // logic for arithmetic 
 #include "logicalOperators.h"   // logic for logical ops
@@ -56,6 +55,8 @@ PG_FUNCTION_INFO_V1(prune_range_eq);
 PG_FUNCTION_INFO_V1(prune_range_and);
 PG_FUNCTION_INFO_V1(prune_range_or);
 PG_FUNCTION_INFO_V1(prune_range_not);
+
+PG_FUNCTION_INFO_V1(prune_set_lt_logn);
 
 PG_FUNCTION_INFO_V1(prune_set_lt);
 PG_FUNCTION_INFO_V1(prune_set_lte);
@@ -286,6 +287,40 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     PG_RETURN_ARRAYTYPE_P(output);                                      \
 }
 
+
+#define DEFINE_PRUNE_SET_FUNC_COMPARISON2(func_name, internal_func)         \
+Datum func_name(PG_FUNCTION_ARGS)                                       \
+{                                                                       \
+    ArrayType *a_range, *b_range, *output;                              \
+    bool            direction;                                          \
+    Oid rangeTypeOID;                                                   \
+    TypeCacheEntry *typcache;                                           \
+    Int4RangeSet a, b, result, norm_result;                             \
+                                                                        \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {PG_RETURN_NULL();}         \
+    a_range   = PG_GETARG_ARRAYTYPE_P(0);                               \
+    b_range   = PG_GETARG_ARRAYTYPE_P(1);                               \
+    direction = PG_GETARG_BOOL(2);                                      \
+                                                                        \
+    rangeTypeOID = ARR_ELEMTYPE(a_range);                               \
+    typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);   \
+    a = deserialize_ArrayType(a_range, typcache);                       \
+    b = deserialize_ArrayType(b_range, typcache);                       \
+    result = internal_func (a, b, direction);                           \
+    /* Nothing to return */                                             \
+    if (result.count == 0 && !result.containsNull) {                    \
+        PG_RETURN_NULL();                                               \
+    }                                                                   \
+                                                                        \
+    norm_result = normalize(result);                                    \
+    output = serialize_ArrayType(norm_result, typcache);                \
+    if (result.ranges)                                                  \
+        pfree(result.ranges);                                           \
+    /*elog(INFO, "Type OID: %u", typcache->type_id);                    \
+    elog(INFO, "serialize_ArrayType: set.count = %d", result.count);*/  \
+    PG_RETURN_ARRAYTYPE_P(output);                                      \
+}
+
 /*Function declarations*/
 RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
 ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
@@ -376,6 +411,8 @@ DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_gte, prune_gte_set_internal)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_eq, prune_eq_set_internal)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_and, prune_AND_internal_set)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_or, prune_OR_internal_set)
+
+DEFINE_PRUNE_SET_FUNC_COMPARISON2(prune_set_lt_logn, prune_lt_set_internal_nlogn)
 
 /////////////////////
  // Helper Functions
@@ -1683,9 +1720,6 @@ agg_avg_range_finalfunc(PG_FUNCTION_ARGS)
 
 
 
-
-
-
 /*
 *   transition function for sum(combine_set_mult_sum(data, mult), resizetrigger, sizelimit)
 *   
@@ -2013,33 +2047,3 @@ agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
     
     PG_RETURN_POINTER(state);
 }
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// #define DEFINE_PRUNE_SET_FUNC_LOGICAL(func_name, internal_func)       
-// Datum func_name(PG_FUNCTION_ARGS)                                       
-// {                                                                       
-//     ArrayType      *a_range, *b_range, *output;                         
-//     Oid rangeTypeOID;
-//     TypeCacheEntry *typcache;                                           
-//     // Int4RangeSet       a, b, result;    
-//     Int4RangeSet a, b, result, norm_result;                                   
-//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {PG_RETURN_NULL();}         
-    
-//     a_range   = PG_GETARG_ARRAYTYPE_P(0);                       
-//     b_range   = PG_GETARG_ARRAYTYPE_P(1);                       
-    
-//     rangeTypeOID = ARR_ELEMTYPE(a_range);                              
-//     typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);  
-//     a = deserialize_ArrayType(a_range, typcache);                      
-//     b = deserialize_ArrayType(b_range, typcache);                      
-    
-//     result = internal_func (a, b);                                      
-//     if (result.isNull) {PG_RETURN_NULL();}                              
-//     output = serialize_RangeType(result, typcache);                     
-//     PG_RETURN_RANGE_P(output);                                          
-// }
