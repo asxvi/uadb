@@ -389,10 +389,10 @@ RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_range_or'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION prune_range_not(a int4range) 
-RETURNS int4range[]
-AS 'MODULE_PATHNAME', 'prune_range_not'
-LANGUAGE C STRICT;
+-- CREATE FUNCTION prune_range_not(a int4range) 
+-- RETURNS int4range[]
+-- AS 'MODULE_PATHNAME', 'prune_range_not'
+-- LANGUAGE C STRICT;
 
 CREATE FUNCTION prune_set_lt(a int4range[], b int4range[], direction boolean) 
 RETURNS int4range[]
