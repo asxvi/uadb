@@ -192,21 +192,34 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
 Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b) {
     Int4RangeSet result;
     Int4Range temp;
-    int maxSize, i, j;
+    int pa = 0; 
+    int pb = 0;
+    Int4RangeSet norm_a;
+    Int4RangeSet norm_b;
 
     result.count = 0;
     result.containsNull = false;
+    result.ranges = palloc(sizeof(Int4Range) * (a.count + b.count));
 
-    maxSize = a.count * b.count;
-    result.ranges = palloc(sizeof(Int4Range) * maxSize);
+    norm_a = normalize(a);
+    norm_b = normalize(b);
 
-    for (i = 0; i < a.count; i++) {
-        for (j = 0; j < b.count; j++) {
-            temp = intersect_range(a.ranges[i], b.ranges[j]);
+    while (pa < norm_a.count && pb < norm_b.count) {
+        temp = intersect_range(norm_a.ranges[pa], norm_b.ranges[pb]);
 
-            if (!temp.isNull) {
-                result.ranges[result.count++] = temp;
-            }
+        if (!temp.isNull) {
+            result.ranges[result.count++] = temp;
+        }
+
+        // advance whatever range ends earlier. it cant intersect anything further right
+        if (norm_a.ranges[pa].upper < norm_b.ranges[pb].upper) {
+            pa++;
+        } else if (norm_b.ranges[pb].upper < norm_a.ranges[pa].upper) {
+            pb++;
+        } else {
+            // equal upper bounds, both are exhausted against each other
+            pa++;
+            pb++;
         }
     }
 
@@ -220,7 +233,7 @@ Int4RangeSet prune_AND_internal_set(Int4RangeSet a, Int4RangeSet b) {
 }
 
 // concat and normalize
-// O(NlogN)
+// O(N + M)
 Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
     Int4RangeSet result;
 
