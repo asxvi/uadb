@@ -150,16 +150,18 @@ class ExperimentRunner:
     }
 
     def __init__(self, db_config, seed):
-        self.db_config = db_config
-        self.results = []
-        self.master_seed = seed
-        self.trial_seed = None
-        self.resultFilepath: str = None
-        self.name = None
-        self.groupName = None
-        self.csv_paths = []
+        self.db_config = db_config          # config file to connect to postgres
+        self.results = []                   # agrgegate results
+        self.master_seed = seed             # for entire script reproducibility
+        self.trial_seed = None              # dependent on master_seed and trialNum
+        self.resultFilepath: str = None     # outputs
+        self.name = None                    # internal id
+        self.groupName = None               # bucket experiments together
+        self.csv_paths = []                 # store all df results of every exp for mass analysis
 
     def run_experiment(self, experiment: ExperimentSettings) -> list:
+        ''' creates or reuses generated data. runs experiment for each trial '''
+
         experiment_results = []
 
         # Set seed once for the whole experiment
@@ -276,23 +278,6 @@ class ExperimentRunner:
             raise
         
         return results
-    
-    def save_results(self, experiment: ExperimentSettings) -> str:
-        ''' saves and returns CSV path of results experiment.resultFilepath'''
-        
-        if not self.results or not experiment.save_csv:
-            return
-        
-        csv_name = f"results_{experiment.name}_sd{self.master_seed}.csv"
-        csv_path = os.path.join(self.resultFilepath, csv_name)
-
-        df = pd.DataFrame(self.results)
-        df.to_csv(csv_path, index=True)         
-        
-        self.csv_paths.append(csv_path)
-        print(f"  CSV saved: {csv_path}")
-
-        return csv_path
     
     def clean_tables(self, find_trigger="t_%", batch_size=200):
         '''drop all tables with wildcard match {find_trigger}'''
@@ -465,79 +450,6 @@ class ExperimentRunner:
         
         return RangeSetType(rset, cu=False)
 
-    def __generate_range(self, experiment:ExperimentSettings) -> RangeType:
-        # uncertain ratio. maybe should account for half nulls, half mult 0
-        if np.random.random() < experiment.uncertain_ratio * 0.5:  
-            return RangeType(0, 0, True)
-        
-        lb = np.random.randint(*experiment.interval_size_range)
-        ub = np.random.randint(lb+1, experiment.interval_size_range[1]+1)
-
-        # protect against mistakes or future changes
-        if lb > ub:
-            lb, ub = ub, lb
-        return RangeType(lb, ub)
-
-    def __generate_set(self, experiment:ExperimentSettings) -> RangeSetType:
-        # if experiment.num_intervals is not None then use, otherwise if experiment.num_intervals_range then use. otherwise raise error
-        if experiment.num_intervals is not None:
-            num_intervals = experiment.num_intervals
-        elif experiment.num_intervals_range is not None:
-            num_intervals = np.random.randint(*experiment.num_intervals_range)
-        else:
-            raise ValueError("Either num_intervals or num_intervals_range must be specified")
-        
-        # entire set is unknown
-        if np.random.random() < experiment.uncertain_ratio * 0.5:  
-            return RangeSetType([], cu=False)
-        
-        rset = []
-
-        # set the first starting point
-        if experiment.start_interval_range is not None:
-            start = np.random.randint(*experiment.start_interval_range)
-        else:
-            start = experiment.interval_size_range[0]
-
-        # for each interval
-        for i in range(num_intervals):    
-            if np.random.random() < experiment.uncertain_ratio * 0.5:  
-                continue
-            
-            # get the interval width
-            if experiment.interval_width is not None:
-                interval_width = experiment.interval_width
-            elif experiment.interval_width_range is not None:
-                interval_width = np.random.randint(*experiment.interval_width_range)
-            else:
-                raise ValueError("Either interval_width or interval_width_range must be specified")
-            interval_end = start + max(1, interval_width)
-            
-            # should never trigger, incase does
-            if interval_end <= start:
-                print(f"BAD RANGE: start={start}, interval_end={interval_end}, width={interval_width}, i={i}")
-                rset.append(RangeType([], interval_end, False))  
-            else:     
-                rset.append(RangeType(start, interval_end, False))
-
-            # find next gap if not last
-            if i < num_intervals -1:
-                if experiment.gap_size is not None:
-                    gap = experiment.gap_size
-                elif experiment.gap_size_range is not None:
-                    gap = np.random.randint(*experiment.gap_size_range)
-                else:
-                    gap = 0  
-                
-                start = interval_end + gap
-
-            # next next start exceeds bounds, we can't add more intervals
-            if experiment.domain_max is not None and start >= experiment.domain_max:
-                break
-        
-
-        return RangeSetType(rset, cu=False)
-
     def __generate_mult(self, experiment:ExperimentSettings) -> RangeType:
         # uncertain ratio. maybe should account for half nulls, half mult 0
         if np.random.random() < experiment.uncertain_ratio * 0.5:  
@@ -574,8 +486,7 @@ class ExperimentRunner:
             FROM {table};"""
         
         cur.execute(sql)
-    
-        # print(f"DEBUG SQL: {table}") 
+
         results = cur.fetchone()[0]
         plan_root = results[0]
         plan = plan_root["Plan"]
@@ -737,7 +648,6 @@ class ExperimentRunner:
             
             # reduction stats
             'sum_results': sum_results if sum_results else None,
-            # 'sum_result_ranges': np.mean(sum_results) if sum_results else None,
             'reduce_calls_mean': np.mean(reduce_calls) if reduce_calls else None,
             'max_interval_count_mean': np.mean(max_intervals) if max_intervals else None,
             'total_interval_count_mean': np.mean(total_intervals) if total_intervals else None,
@@ -746,7 +656,6 @@ class ExperimentRunner:
             'minEffectiveIntervalCountMean': np.mean(minEffectiveIntervalCount) if minEffectiveIntervalCount else None,
             'convergedToTotSize': np.mean(convergedToTotSize) if convergedToTotSize else None,
             'result_coverage_mean': np.mean(result_coverages) if result_coverages else None,
-            # ^^ v3
         }
         
         return aggregated
@@ -806,20 +715,6 @@ class ExperimentRunner:
                 file.write(';\n\n')
 
         print(f"  DDL saved: {ddl_path}")
-    
-    def __calculate_coverage(self, interval_set):
-        '''adds all values contained within every interval in set'''
-        cover = 0
-        for interval in interval_set:
-            cover += interval.upper - interval.lower
-        return cover
-
-    def __calculate_coverage_i4r(self, interval_set: RangeSetType):
-        '''i4r version: adds all values contained within every interval in set'''
-        cover = 0
-        for interval in interval_set.rset:
-            cover += interval.ub - interval.lb
-        return cover
     
 def generate_seed(in_seed=None):
     '''genrate the master seed of this programs run. (can be included in runner or settings class)'''
@@ -902,6 +797,7 @@ def run_all():
     
     ### Run every experiment Suite and save results
     for suite in experiments.values():
+
         suite_results = []
         for group in suite.groups.values():
             results = _run_experiment_group(runner, suite.name, group)
@@ -928,7 +824,7 @@ def _load_experiments(args, runner, db_config):
         return load_experiments_from_file(args.yaml_experiments_file)
     elif args.code:
         namespace = {'runner': runner, 'db_config': db_config}
-        exec(open(args.code).read(), namespace)
+        exec(open(args.code).read(), namespace)     # CS361 lol
         return namespace.get('experiments', {})
     else:
         sys.exit("No experiment source specified (use --help for examples)")
@@ -947,7 +843,7 @@ def _run_experiment_group(runner: ExperimentRunner, suite_name: str, group: Expe
 
     # for every experiment within group, run it
     for experiment in group.experiments.values():
-        runner.run_experiment(experiment)
+        runner.run_experiment(experiment)       #main
     
     os.makedirs(runner.resultFilepath, exist_ok=True)
     group_csv_path = f"{runner.resultFilepath}results_sd{runner.master_seed}.csv"
@@ -969,6 +865,9 @@ def _plot_experiment_suite(runner: ExperimentRunner, csv_paths: list) -> None:
 
     plotter = StatisticsPlotter(runner.resultFilepath, runner.master_seed)
     plotter.plot_experiment_suite(csv_paths)
+
+
+
 
 if __name__ == '__main__':
     start = time.perf_counter()

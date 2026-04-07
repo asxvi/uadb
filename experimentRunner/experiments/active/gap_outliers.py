@@ -45,7 +45,6 @@ def ni_gap_sweep_outlier(gap_sizes: list, ni_list: int, n_list: int, trigger_siz
     group = ExperimentGroup(f'ni_gap_red{trigger_size}_{reduce_to_size}_sweep', 'gap_size_range', None)
     
     for n in n_list:
-    # if 1==1:
         for g in gap_sizes:
             # for ni in ni_list:
                 ni = 5
