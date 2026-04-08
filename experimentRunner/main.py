@@ -165,7 +165,7 @@ class ExperimentRunner:
         experiment_results = []
 
         # Set seed once for the whole experiment
-        self.trial_seed = (self.master_seed + experiment.curr_trial) % (2**32)
+        self.trial_seed = (self.master_seed) % (2**32)
         np.random.seed(self.trial_seed)
 
         # Set experiment_id BEFORE generating/inserting data
@@ -178,18 +178,56 @@ class ExperimentRunner:
             self.__save_ddl_file(experiment, file_data_format)
         self.__insert_data_db(experiment, db_data_format)
 
+        # experiment_id stays the same every trial — same table, same data
         for trial in range(experiment.num_trials):
             experiment.curr_trial = trial + 1
-            print(f' trial:{experiment.curr_trial}')
-            # experiment_id stays the same every trial — same table, same data
-            # experiment.experiment_id = self.__generate_name(experiment)
+            print(f'DEBUG trial:{experiment.curr_trial}')
 
-            trial_results = self.run_queries(experiment)
+            # new connection per trial to reduce potential bias
+            conn = self.__connect_db()
+            try:
+                trial_results = self.run_queries(experiment, conn)
+            finally:
+                conn.close()
+
+            # save trial results to experiment results
             experiment_results.append(trial_results)
 
         aggregated_results = self.__calc_aggregate_results(experiment, experiment_results)
         self.results.append(aggregated_results)
         return experiment_results
+    
+    # def run_experiment(self, experiment: ExperimentSettings) -> list:
+    #     ''' creates or reuses generated data. runs experiment for each trial '''
+
+    #     experiment_results = []
+
+    #     # Set seed once for the whole experiment
+    #     self.trial_seed = (self.master_seed + experiment.curr_trial) % (2**32)
+    #     np.random.seed(self.trial_seed)
+
+    #     # Set experiment_id BEFORE generating/inserting data
+    #     experiment.curr_trial = 1
+    #     experiment.experiment_id = self.__generate_name(experiment)
+
+    #     # Generate data once and insert under the fixed experiment_id
+    #     db_data_format, file_data_format = self.generate_data(experiment)
+    #     if experiment.save_ddl:
+    #         self.__save_ddl_file(experiment, file_data_format)
+    #     self.__insert_data_db(experiment, db_data_format)
+
+    #     for trial in range(experiment.num_trials):
+    #         experiment.curr_trial = trial + 1
+    #         print(f' trial:{experiment.curr_trial}')
+    #         # experiment_id stays the same every trial — same table, same data
+    #         # experiment.experiment_id = self.__generate_name(experiment)
+
+    #         trial_results = self.run_queries(experiment)
+    #         experiment_results.append(trial_results)
+
+    #     aggregated_results = self.__calc_aggregate_results(experiment, experiment_results)
+    #     self.results.append(aggregated_results)
+    #     return experiment_results
             
     def generate_data(self, experiment :ExperimentSettings):
         '''
@@ -222,8 +260,10 @@ class ExperimentRunner:
                 
         return db_formatted_rows, file_formatted_rows
 
-    def run_queries(self, experiment: ExperimentSettings):
-        '''Run aggregation tests and collect metrics.'''
+    def run_queries(self, experiment: ExperimentSettings, conn = None):
+        '''Run aggregation tests and collect metrics.
+           NOTE- does not account for cold/warm cache, or scan cost/planning vs agrgegation/execution cost
+        '''
         
         results = {
             'row_count' : 0,
@@ -244,34 +284,39 @@ class ExperimentRunner:
         table = experiment.experiment_id
         config = self.DATA_TYPE_CONFIG[experiment.data_type]
 
+        agg_jobs = [
+            ('min_time', 'MIN', config['combine_min'], []),
+            ('max_time', 'MAX', config['combine_max'], []),
+            ('sum_time', 'SUM', config['combine_sum'], list(experiment.reduce_triggerSz_sizeLim)),
+            ('sumtest_time', 'SUMTEST', config['combine_sum'], [experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE])
+        ]
+        random.shuffle(agg_jobs)            # shuffle bc of bias for warm cache later on. ideally average out a bit 
+
         try:
-            with self.__connect_db() as conn:
-                with conn.cursor() as cur:
-                    # count 
-                    cur.execute(f"SELECT COUNT(*) FROM {table};")
-                    results['row_count'] = cur.fetchone()[0]
-                    
-                    print(f" DEBUG SQL- running aggs on : {table}") 
-                    
-                    # aggreate metrics
-                    results['sum_time'] = self.__run_aggregate(cur, table, 'SUM', config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1])
-                    results['min_time'] = self.__run_aggregate(cur, table, 'MIN', config['combine_min'])
-                    results['max_time'] = self.__run_aggregate(cur, table, 'MAX', config['combine_max'])
-                    results['sumtest_time'] = self.__run_aggregate(cur, table, 'SUMTEST', config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
-                    
-                    # get additional tests for sumtest. Run experiment and time profile once each
-                    metrics = self.__get_sumtest_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
-                    
-                    if metrics: 
-                        results['sum_test_result'] = metrics['result']
-                        results['reduce_calls'] = metrics['reduce_calls']
-                        results['max_interval_count'] = metrics['max_interval_count']
-                        results['total_interval_count'] = metrics['total_interval_count']
-                        results['combine_calls'] = metrics['combine_calls']
-                        results['result_size'] = metrics['result_size']
-                        results['min_interval_count'] = metrics['min_interval_count']
-                        results['total_min_coverage'] = metrics['total_min_coverage']
-                        results['result_coverage'] = self.__calculate_coverage(metrics['result'])
+            # with self.__connect_db() as conn:
+            with conn.cursor() as cur:
+                print(f" DEBUG SQL- running queries for : {table}") 
+                
+                # count 
+                cur.execute(f"SELECT COUNT(*) FROM {table};")
+                results['row_count'] = cur.fetchone()[0]
+                
+                # run shuffled aggregates
+                for key, agg, func, params in agg_jobs:
+                    results[key] = self.__run_aggregate(cur, table, agg, func, *params)
+                
+                # get additional results for sumtest. Run experiment and time profile once each
+                metrics = self.__get_sumtest_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
+                if metrics: 
+                    results['sum_test_result'] = metrics['result']
+                    results['reduce_calls'] = metrics['reduce_calls']
+                    results['max_interval_count'] = metrics['max_interval_count']
+                    results['total_interval_count'] = metrics['total_interval_count']
+                    results['combine_calls'] = metrics['combine_calls']
+                    results['result_size'] = metrics['result_size']
+                    results['min_interval_count'] = metrics['min_interval_count']
+                    results['total_min_coverage'] = metrics['total_min_coverage']
+                    results['result_coverage'] = self.__calculate_coverage(metrics['result'])
 
         except Exception as e:
             print(f"Error running queries for {experiment.experiment_id}: {e}")
@@ -280,7 +325,7 @@ class ExperimentRunner:
         return results
     
     def clean_tables(self, find_trigger="t_%", batch_size=200):
-        '''drop all tables with wildcard match {find_trigger}'''
+        ''' batch drop all tables with wildcard match {find_trigger}'''
         
         print(f"\nCleaning/ Dropping all Tables starting with '{find_trigger}'")
         with self.__connect_db() as conn:
@@ -484,7 +529,6 @@ class ExperimentRunner:
         sql = f"""EXPLAIN (analyze, format json)
             SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
             FROM {table};"""
-        
         cur.execute(sql)
 
         results = cur.fetchone()[0]
@@ -527,8 +571,8 @@ class ExperimentRunner:
                 (result).minEffectiveIntervalCount,
                 (result).convergedToTotSize
             FROM (
-                SELECT sumTest({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
-                FROM {table}) subq;"""
+                (SELECT sumTest({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
+                FROM {table})) subq;"""
         
         cur.execute(sql)
         result = cur.fetchone()     
@@ -597,12 +641,13 @@ class ExperimentRunner:
         def extract(key):
             return [r[key] for r in trial_results if r.get(key) is not None]
 
+        row_count = extract('row_count')
         min_times = extract('min_time')
         max_times = extract('max_time')
         sum_times = extract('sum_time')
         sumtest_times = extract('sumtest_time')
 
-        sum_results = trial_results[0].get('sum_test_result')   # actual result
+        sum_results = trial_results[0].get('sum_test_result') if trial_results else None   # actual result
         reduce_calls = extract('reduce_calls')
         max_intervals = extract('max_interval_count')
         total_intervals = extract('total_interval_count')
@@ -633,7 +678,8 @@ class ExperimentRunner:
             'independent_variable': experiment.independent_variable,
             'distribution': dist.distribution,
             **distribution_fields,
-
+            
+            'row_count': np.mean(row_count) if row_count else None,
             # MIN stats
             'min_time_mean': np.mean(min_times) if min_times else None,
             'min_time_std': np.std(min_times) if min_times else None,    

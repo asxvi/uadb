@@ -28,7 +28,7 @@ PG_FUNCTION_INFO_V1(set_subtract);
 PG_FUNCTION_INFO_V1(set_multiply);
 PG_FUNCTION_INFO_V1(set_divide);
 
-/*(Logical Operator Functions)*/
+/*(Logical / Comparison)*/
 PG_FUNCTION_INFO_V1(range_lt);
 PG_FUNCTION_INFO_V1(range_lte);
 PG_FUNCTION_INFO_V1(range_gt);
@@ -46,7 +46,7 @@ PG_FUNCTION_INFO_V1(set_sort);
 PG_FUNCTION_INFO_V1(set_normalize);
 PG_FUNCTION_INFO_V1(set_reduce_size);
 
-/*(Prune Functions)*/
+/*(Prune Logical Functions)*/
 PG_FUNCTION_INFO_V1(prune_range_lt);
 PG_FUNCTION_INFO_V1(prune_range_gt);
 PG_FUNCTION_INFO_V1(prune_range_lte);
@@ -54,8 +54,6 @@ PG_FUNCTION_INFO_V1(prune_range_gte);
 PG_FUNCTION_INFO_V1(prune_range_eq);
 PG_FUNCTION_INFO_V1(prune_range_and);
 PG_FUNCTION_INFO_V1(prune_range_or);
-
-PG_FUNCTION_INFO_V1(prune_set_lt_logn);
 
 PG_FUNCTION_INFO_V1(prune_set_lt);
 PG_FUNCTION_INFO_V1(prune_set_lte);
@@ -370,16 +368,14 @@ DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_lt, prune_lt_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_gt, prune_gt_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_lte, prune_lte_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_gte, prune_gte_internal_range)
-
 DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_eq, prune_eq_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_LOGICAL(prune_range_and, prune_AND_internal_range)
-DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(prune_range_or, prune_OR_internal_range)
+DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(prune_range_or, prune_OR_internal_range) // returns a set bc potentially returns 2 ranges
 
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_lt, prune_lt_set_internal)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_lte, prune_lte_set_internal)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_gt, prune_gt_set_internal)
 DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_gte, prune_gte_set_internal)
-
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_eq, prune_eq_set_internal)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_and, prune_AND_internal_set)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
@@ -456,12 +452,13 @@ set_reduce_size(PG_FUNCTION_ARGS)
     // reduce the set to numRangesKeep
     result = reduceSize(set1, numRangesKeep);
 
-    // the reduced size should always be less than equal to numRangesKeep
-    if (result.count < numRangesKeep) {
-        ereport(ERROR,
-            (errcode(ERRCODE_DATA_CORRUPTED),
-            errmsg("result.count < numRangesKeep when reducing. Impossible result")));
-    }
+    // removed this because we just ignore if they want to reduce larger than whats possible
+    // // the reduced size should always be less than equal to numRangesKeep
+    // if (result.count < numRangesKeep) {
+    //     ereport(ERROR,
+    //         (errcode(ERRCODE_DATA_CORRUPTED),
+    //         errmsg("result.count < numRangesKeep when reducing. Impossible result")));
+    // }
 
     output = serialize_ArrayType(result, typcache);
     
@@ -617,10 +614,14 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
 
     if(set1.containsNull && set1.count == 1) {
         output = serialize_ArrayType(set2, typcache);
+        pfree(set1.ranges);
+        pfree(set2.ranges);
         return output;
     }
     else if(set2.containsNull && set2.count == 1) {
         output = serialize_ArrayType(set1, typcache);
+        pfree(set1.ranges);
+        pfree(set2.ranges);
         return output;
     }
 
@@ -995,7 +996,7 @@ agg_sum_set_finalfunc(PG_FUNCTION_ARGS)
     SumAggState *state;
     ArrayType *result;
     TypeCacheEntry *typcache;
-    Int4RangeSet reduced;
+    Int4RangeSet normalized, reduced;
     Oid elemTypeOID;
     
     if (PG_ARGISNULL(0)) {
@@ -1003,24 +1004,31 @@ agg_sum_set_finalfunc(PG_FUNCTION_ARGS)
     }
     
     state = (SumAggState*) PG_GETARG_POINTER(0);
-    // empty state
-    if (state->ranges.count == 0) {
-        elemTypeOID = TypenameGetTypid("int4range");
-        PG_RETURN_ARRAYTYPE_P(construct_empty_array(elemTypeOID));
-    }
     
     elemTypeOID = TypenameGetTypid("int4range");
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
+
+    // empty state
+    if (state->ranges.count == 0) {
+        PG_RETURN_ARRAYTYPE_P(construct_empty_array(elemTypeOID));
+    }
     
-    // reduce final time
+    // always normalize on final call
+    normalized = normalize(state->ranges);
+
+    // optionally reduce if the normalized result is still smaller than the size limit
     if (state->ranges.count >= state->resizeTrigger) {
-        reduced = reduceSize(state->ranges, state->sizeLimit);
+        reduced = reduceSize(normalized, state->sizeLimit);
+        pfree(normalized.ranges);
         result = serialize_ArrayType(reduced, typcache);
         pfree(reduced.ranges);
         PG_RETURN_ARRAYTYPE_P(result);
     }
+    else {
+        result = serialize_ArrayType(normalized, typcache);
+        pfree(normalized.ranges);
+    }
     
-    result = serialize_ArrayType(state->ranges, typcache);
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
@@ -1525,14 +1533,10 @@ agg_count_transfunc(PG_FUNCTION_ARGS)
 Datum 
 agg_avg_range_transfunc(PG_FUNCTION_ARGS)
 {
-    MemoryContext aggcontext;
-    MemoryContext oldcontext;
-    RangeType *data;
-    RangeType *mult;
-    Int4Range curr;
-    Int4Range m;
-    Int4Range combSum;
+    MemoryContext aggcontext, oldcontext;
     rAvgAggState *state;
+    RangeType *data, *mult;
+    Int4Range curr, m, combSum;
     TypeCacheEntry *typcache;
 
     if (!AggCheckCallContext(fcinfo, &aggcontext)) {
@@ -1552,32 +1556,27 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
     data = PG_GETARG_RANGE_P(1);
     mult = PG_GETARG_RANGE_P(2);
     typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
+    curr = deserialize_RangeType(data, typcache);
+    m = deserialize_RangeType(mult, typcache);
+    combSum = set_mult_combine_helper_sum()
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){    
         // switch to aggregate memory context for persistent allocations
         oldcontext = MemoryContextSwitchTo(aggcontext);
-
         state = (rAvgAggState *) palloc0(sizeof(rAvgAggState));
-        state->sum = deserialize_RangeType(data, typcache);
-        state->count = deserialize_RangeType(mult, typcache);
-        
-        // need to return to callers context
-        MemoryContextSwitchTo(oldcontext);
-        
+        state->sum = combSum;
+        state->count = range_mult_combine_helper_sum(curr, m,);
+        MemoryContextSwitchTo(oldcontext);      // return to callers context
         PG_RETURN_POINTER(state);
     }
 
     // otherwise merge into existing state
     state = (rAvgAggState *) PG_GETARG_POINTER(0);
-
-    curr = deserialize_RangeType(data, typcache);
-    m = deserialize_RangeType(mult, typcache);
-    
-    combSum = range_mult_combine_helper_sum(curr, m, 0);
-    range_add_internal(state->sum, combSum);
-    range_add_internal(state->count, m);
-
+    oldcontext = MemoryContextSwitchTo(aggcontext);
+    state->sum = range_add_internal(state->sum, combSum);
+    state->count = range_add_internal(state->count, m);
+    MemoryContextSwitchTo(oldcontext);      // return to callers context
     PG_RETURN_POINTER(state);
 }
 
@@ -1855,7 +1854,8 @@ Datum
 agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
 {
     SumAggStateTest *state;
-    Int4RangeSet normResult;
+    // Int4RangeSet normResult;
+    Int4RangeSet reduced;
     Datum values[9];
     bool nulls[9] = {false,false,false,false,false,false,false,false,false};
     HeapTuple tuple;
@@ -1875,18 +1875,22 @@ agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
     elemTypeOID = TypenameGetTypid("int4range");
     if (elemTypeOID == InvalidOid)
         elog(ERROR, "int4range type not found in catalog");
-
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
 
-    normResult = normalize(state->ranges);
+    // reduce final time
+    reduced = state->ranges;
+    if (state->ranges.count >= state->resizeTrigger) {
+        reduced = reduceSize(state->ranges, state->sizeLimit);
+    }
+
 
     // attemp to track when collapse occurs and min width/ num ranges
-    currentSpan  = totalSpan(normResult);
-    currentCount = normResult.count;
+    currentSpan = totalSpan(reduced);
+    currentCount = reduced.count;
     state->minEffectiveIntervalCount = currentCount;
     state->convergedToTotSize = currentSpan;
 
-    arr = serialize_ArrayType(normResult, typcache);
+    arr = serialize_ArrayType(reduced, typcache);
     values[0] = PointerGetDatum(arr);
     values[1] = Int64GetDatum(state->resizeTrigger);
     values[2] = Int64GetDatum(state->sizeLimit);

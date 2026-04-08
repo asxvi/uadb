@@ -95,7 +95,6 @@ gap_sizes = [2, 5, 10, 25, 35, 50]
 
 plot_ni_gap_sweep_outlier(ni_list, n_list, gap_sizes)
 
-
 # bigger gaps
 # diff start points [gap, 10*gap, ]
 # runtimes

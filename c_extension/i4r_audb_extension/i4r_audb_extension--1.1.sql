@@ -335,17 +335,17 @@ create aggregate sumTest (int4range[], resizeTrigger integer, sizeLimit integer,
     finalfunc = agg_sum_set_finalfuncTest
 );
 
-CREATE FUNCTION agg_sum_set_transfuncTestNN(internal, int4range[], integer, integer, bool) 
-RETURNS internal
-AS 'MODULE_PATHNAME', 'agg_sum_set_transfuncTestNN'
-LANGUAGE c;
+-- CREATE FUNCTION agg_sum_set_transfuncTestNN(internal, int4range[], integer, integer, bool) 
+-- RETURNS internal
+-- AS 'MODULE_PATHNAME', 'agg_sum_set_transfuncTestNN'
+-- LANGUAGE c;
 
-create aggregate sumTestNN (int4range[], resizeTrigger integer, sizeLimit integer, bool) 
-(
-    stype = internal,
-    sfunc = agg_sum_set_transfuncTestNN,
-    finalfunc = agg_sum_set_finalfuncTest
-);
+-- create aggregate sumTestNN (int4range[], resizeTrigger integer, sizeLimit integer, bool) 
+-- (
+--     stype = internal,
+--     sfunc = agg_sum_set_transfuncTestNN,
+--     finalfunc = agg_sum_set_finalfuncTest
+-- );
 
 
 
