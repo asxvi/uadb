@@ -118,6 +118,18 @@ LANGUAGE c;
 --------------------------------Helper functions------------------------------
 ------------------------------------------------------------------------------
 
+-- find total volume of interval
+CREATE FUNCTION range_coverage(range int4range)
+RETURNS int4
+AS 'MODULE_PATHNAME', 'range_coverage'
+LANGUAGE c;
+
+-- find total volume of every inteval in set
+CREATE FUNCTION set_coverage(set int4range[])
+RETURNS int4
+AS 'MODULE_PATHNAME', 'set_coverage'
+LANGUAGE c;
+
 -- lift takes 1 int32 and returns its equivallent Int4Range 
 CREATE FUNCTION lift_scalar(val int4)
 RETURNS int4range

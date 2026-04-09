@@ -41,6 +41,8 @@ PG_FUNCTION_INFO_V1(set_gte);
 PG_FUNCTION_INFO_V1(set_eq);
 
 /*(Helper Functions)*/
+PG_FUNCTION_INFO_V1(range_coverage);
+PG_FUNCTION_INFO_V1(set_coverage);
 PG_FUNCTION_INFO_V1(lift_scalar);
 PG_FUNCTION_INFO_V1(set_sort);
 PG_FUNCTION_INFO_V1(set_normalize);
@@ -386,6 +388,62 @@ DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
 /////////////////////
  // Helper Functions
 /////////////////////
+
+// find total volume of interval
+Datum
+range_coverage(PG_FUNCTION_ARGS)
+{
+    RangeType *input;
+    Int4Range r;
+    TypeCacheEntry *typcache;
+
+    if (PG_ARGISNULL(0))
+        PG_RETURN_NULL();
+
+    input = PG_GETARG_RANGE_P(0);
+    typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
+    r = deserialize_RangeType(input, typcache);
+
+    if (r.isNull)
+        PG_RETURN_INT64(0);
+
+    PG_RETURN_INT64((int64)(r.upper - r.lower));
+}
+
+// find total volume of every inteval in set
+Datum
+set_coverage(PG_FUNCTION_ARGS)
+{
+    ArrayType *input;
+    Int4RangeSet set;
+    TypeCacheEntry *typcache;
+    Oid elemType;
+    int64 total;
+    size_t i;
+
+    // check for NULLS. Diff from empty check
+    if (PG_ARGISNULL(0)){
+        PG_RETURN_NULL();
+    }
+
+    input = PG_GETARG_ARRAYTYPE_P(0);
+
+    if (ArrayGetNItems(ARR_NDIM(input), ARR_DIMS(input)) == 0) {
+        PG_RETURN_INT64(0);
+    }
+
+    elemType = ARR_ELEMTYPE(input);
+    typcache = lookup_type_cache(elemType, TYPECACHE_RANGE_INFO);
+    set = deserialize_ArrayType(input, typcache);
+
+    for (i = 0; i < set.count; i++) {
+        if (!set.ranges[i].isNull)
+            total += (int64)((set.ranges[i].upper-1) - set.ranges[i].lower);
+    }
+
+    pfree(set.ranges);
+    PG_RETURN_INT64(total);
+}
 
 /* lift expects 1 parameter x for example and returns a valid int4range [x, x+1) */
 // Lift an Integer x into a RangeType [x, x+1)

@@ -426,45 +426,50 @@ WHERE actual IS DISTINCT FROM expected;
 
 
 -- select 
---     set_normalize(array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)]),
---     set_normalize(array[int4range(2,5), int4range(5,10), int4range(7,14)]),
+--     set_normalize(array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)]) as norm_a,
+--     set_normalize(array[int4range(2,5), int4range(5,10), int4range(7,14)]) as norm_b,
 --     prune_set_lt(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         false
---     ),
+--     ) as prune_set_lt_f,
 --     prune_set_lt(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         true
---     ),
+--     ) as prune_set_lt_t,
 --     prune_set_lte(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         false
---     ),
+--     ) as prune_set_lte_f,
 --     prune_set_lte(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         true
---     ),
+--     ) as prune_set_lte_t,
 --     prune_set_gt(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         false
---     ),
+--     ) as prune_set_gt_f,
 --     prune_set_gt(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         true
---     ),
+--     ) as prune_set_gt_t,
 --     prune_set_gte(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         false
---     ),
+--     ) as prune_set_gte_f,
 --     prune_set_gte(
 --         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
 --         array[int4range(2,5), int4range(5,10), int4range(7,14)],
 --         true
---     );
+--     ) as prune_set_gt_t;
+
+
+-- SELECT sum(combine_set_mult_sum(val, mult), 500, 100)
+-- FROM my_table
+-- WHERE set_lt(val, array[int4range(10,20)]) = true;

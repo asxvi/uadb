@@ -139,7 +139,7 @@ Int4Range prune_AND_internal_range(Int4Range a, Int4Range b) {
 
 // combines all ranges into a set. Returns at most size 2 set
 Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
     result.count = 0;
     result.containsNull = false;
     result.ranges = (Int4Range*) malloc(sizeof(Int4Range) * 2); 
@@ -180,7 +180,10 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
         result.count = 2;
     }
 
-    return normalize(result);
+    rv = normalize(result);
+    free(result.ranges);
+
+    return rv;
 }
 
 //////////////////////////
@@ -190,7 +193,7 @@ Int4RangeSet prune_OR_internal_range(Int4Range a, Int4Range b) {
 // all points of intersection fpr set. both sides shrink
 // pairwise intersection
 Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
     Int4Range temp;
     int pa = 0; 
     int pb = 0;
@@ -223,7 +226,13 @@ Int4RangeSet prune_eq_set_internal(Int4RangeSet a, Int4RangeSet b) {
         }
     }
 
-    return normalize(result);
+    rv = normalize(result);
+
+    free(norm_a.ranges);
+    free(norm_b.ranges);
+    free(result.ranges);
+    
+    return rv;
 }
 
 // NOTE: and is binary not unary. combining conditions required stacking ands
@@ -235,7 +244,7 @@ Int4RangeSet prune_AND_internal_set(Int4RangeSet a, Int4RangeSet b) {
 // concat and normalize
 // O(N + M)
 Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
 
     result.count = 0;
     result.containsNull = a.containsNull || b.containsNull;
@@ -251,7 +260,9 @@ Int4RangeSet prune_OR_internal_set(Int4RangeSet a, Int4RangeSet b) {
         result.ranges[result.count++] = b.ranges[i];
     }
 
-    return normalize(result);
+    rv = normalize(result);
+    free(result.ranges);
+    return rv;
 }
 
 // handles strict less than: e1 < e2 for sets
@@ -307,7 +318,7 @@ Int4RangeSet prune_lt_set_internal(Int4RangeSet a, Int4RangeSet b, bool directio
 
 // handles less than equal: e1 <= e2 for sets
 Int4RangeSet prune_lte_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
     Int4RangeSet norm_a;
     Int4RangeSet norm_b;
     Int4Range temp;
@@ -353,12 +364,18 @@ Int4RangeSet prune_lte_set_internal(Int4RangeSet a, Int4RangeSet b, bool directi
         }
     }
 
-    return normalize(result);
+    rv = normalize(result);
+    
+    free(norm_a.ranges);
+    free(norm_b.ranges);
+    free(result.ranges);
+    
+    return rv;
 }
 
 // handles less than equal: e1 <= e2 for sets
 Int4RangeSet prune_gt_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
     Int4RangeSet norm_a;
     Int4RangeSet norm_b;
     Int4Range temp;
@@ -404,12 +421,18 @@ Int4RangeSet prune_gt_set_internal(Int4RangeSet a, Int4RangeSet b, bool directio
         }
     }
 
-    return normalize(result);
+    rv = normalize(result);
+
+    free(norm_a.ranges);
+    free(norm_b.ranges);
+    free(result.ranges);
+    
+    return rv;   
 }
 
 // handles less than equal: e1 <= e2 for sets
 Int4RangeSet prune_gte_set_internal(Int4RangeSet a, Int4RangeSet b, bool direction) {
-    Int4RangeSet result;
+    Int4RangeSet result, rv;
     Int4RangeSet norm_a;
     Int4RangeSet norm_b;
     Int4Range temp;
@@ -455,5 +478,11 @@ Int4RangeSet prune_gte_set_internal(Int4RangeSet a, Int4RangeSet b, bool directi
         }
     }
 
-    return normalize(result);
+    rv = normalize(result);
+
+    free(norm_a.ranges);
+    free(norm_b.ranges);
+    free(result.ranges);
+    
+    return rv;
 }
