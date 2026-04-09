@@ -787,7 +787,7 @@ class StatisticsPlotter:
         combined[['resizeTrigger', 'sizeLimit']] = combined['reduce_triggerSz_sizeLim'].str.strip('()').str.split(',', expand=True).astype(int)
         combined['gap_size_range_tuple'] = combined['gap_size_range'].apply(ast.literal_eval)
         combined['reduce_triggerSz_sizeLim_tuple'] = combined['reduce_triggerSz_sizeLim'].apply(ast.literal_eval)
-        combined['time_norm'] = combined['sumtest_time_mean'] / combined['sumtest_time_mean'].max()
+        combined['time_norm'] = combined['sumMetrics_time_mean'] / combined['sumMetrics_time_mean'].max()
         combined['coverage_norm'] = combined['result_coverage_mean'] / combined['result_coverage_mean'].max()
         combined['efficiency'] = combined['coverage_norm'] / combined['time_norm']
         return combined
