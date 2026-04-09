@@ -29,6 +29,10 @@ typedef struct{
     int upper;  //inclusive
 } Multiplicity;
 
+// convenice
+Int4RangeSet empty_set(void);
+Int4RangeSet null_set(void);
+
 // // sum aggregate state data type
 // typedef struct {
 //     Int4RangeSet accumulated;        // potential duplicates
@@ -80,6 +84,7 @@ void printRangeSet(Int4RangeSet a);
 void printRangeSetElog(Int4RangeSet a);
 bool validRange(Int4Range a);
 bool validRangeStrict(Int4Range a);
+Int4RangeSet deep_copy(Int4RangeSet src);
 
 // for finding the min int in array. probably not optimal method
 int MIN(int My_array[], int len);

@@ -9,6 +9,24 @@
 // #define min2(a, b) (((a) < (b)) ? (a) : (b))
 // #define max2(a, b) (((a) > (b)) ? (a) : (b))
 
+Int4RangeSet empty_set() {
+  Int4RangeSet r;
+  r.count = 0;
+  r.containsNull = false;
+  r.ranges = NULL;
+  return r;
+}
+
+Int4RangeSet null_set() {
+  Int4RangeSet r;
+  r.count = 1;
+  r.containsNull = true;
+  r.ranges = malloc(sizeof(Int4Range));
+  r.ranges[0].isNull = true;
+  r.ranges[0].lower = 0;
+  r.ranges[0].upper = 0;
+  return r;
+}
 
 // https://www.delftstack.com/howto/c/c-max-and-min-function/
 // linearly scan to find the MIN value in array
@@ -79,6 +97,18 @@ void printRangeSetElog(Int4RangeSet a){
   elog(INFO, "}\n");
 }
 
+Int4RangeSet deep_copy(Int4RangeSet src) {
+    Int4RangeSet r;
+    r.count = src.count;
+    r.containsNull = src.containsNull;
+    if (src.count == 0 || src.ranges == NULL) {
+        r.ranges = NULL;
+        return r;
+    }
+    r.ranges = malloc(sizeof(Int4Range) * src.count);
+    memcpy(r.ranges, src.ranges, sizeof(Int4Range) * src.count);
+    return r;
+}
 
 // Checks if a is increasing: a.lower <= a.upper
 bool validRange(Int4Range a){

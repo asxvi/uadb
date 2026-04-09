@@ -614,6 +614,8 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
     set1 = deserialize_ArrayType(input1, typcache);
     set2 = deserialize_ArrayType(input2, typcache);
 
+
+    // is NULL
     if(set1.containsNull && set1.count == 1) {
         output = serialize_ArrayType(set2, typcache);
         pfree(set1.ranges);
