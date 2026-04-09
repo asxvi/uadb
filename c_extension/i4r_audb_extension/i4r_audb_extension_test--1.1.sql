@@ -382,47 +382,47 @@ INSERT INTO tX_r_prune_basic (a, b, mult) VALUES
     (int4range(100,200), int4range(1,2), int4range(1,4));
     
 -- show failures
--- \echo Test1: Range Arithmetic
--- SELECT 'Test1: Range Arithmetic' as Test;
--- SELECT *, 't1_r_arithmetic' as source
--- FROM t1_r_arithmetic
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test1: Range Arithmetic
+SELECT 'Test1: Range Arithmetic' as Test;
+SELECT *, 't1_r_arithmetic' as source
+FROM t1_r_arithmetic
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test2: Set Arithmetic
--- SELECT 'Test2: Set Arithmetic' as Test;
--- SELECT *, 't2_s_arithmetic' as source
--- FROM t2_s_arithmetic
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test2: Set Arithmetic
+SELECT 'Test2: Set Arithmetic' as Test;
+SELECT *, 't2_s_arithmetic' as source
+FROM t2_s_arithmetic
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test3: Range Logical Operators
--- SELECT 'Test3: Range Logical Operators' as Test;
--- SELECT *, 't3_r_logical' as source
--- FROM t3_r_logical
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test3: Range Logical Operators
+SELECT 'Test3: Range Logical Operators' as Test;
+SELECT *, 't3_r_logical' as source
+FROM t3_r_logical
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test4: Set Logical Operators
--- SELECT 'Test4: Set Logical Operators' as Test;
--- SELECT *, 't4_s_logical' as source
--- FROM t4_s_logical
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test4: Set Logical Operators
+SELECT 'Test4: Set Logical Operators' as Test;
+SELECT *, 't4_s_logical' as source
+FROM t4_s_logical
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test5: Range Aggregates
--- SELECT 'Test5: Range Aggregates' as Test;
--- SELECT *, 't5_r_aggregates' as source
--- FROM t5_r_aggregates
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test5: Range Aggregates
+SELECT 'Test5: Range Aggregates' as Test;
+SELECT *, 't5_r_aggregates' as source
+FROM t5_r_aggregates
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test6: Set Aggregates
--- SELECT 'Test6: Set Aggregates' as Test;
--- SELECT *, 't6_s_aggregates' as source
--- FROM t6_s_aggregates
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test6: Set Aggregates
+SELECT 'Test6: Set Aggregates' as Test;
+SELECT *, 't6_s_aggregates' as source
+FROM t6_s_aggregates
+WHERE actual IS DISTINCT FROM expected;
 
--- \echo Test7: Special Aggregates
--- SELECT 'Test7: Set Aggregates' as Test;
--- SELECT *, 't7_s_aggregates' as source
--- FROM t7_s_aggregates
--- WHERE actual IS DISTINCT FROM expected;
+\echo Test7: Special Aggregates
+SELECT 'Test7: Set Aggregates' as Test;
+SELECT *, 't7_s_aggregates' as source
+FROM t7_s_aggregates
+WHERE actual IS DISTINCT FROM expected;
 
 
 

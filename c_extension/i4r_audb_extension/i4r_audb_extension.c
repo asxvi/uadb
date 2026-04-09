@@ -656,7 +656,7 @@ logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4R
     Int4Range range2;
     TypeCacheEntry *typcache;
     int result;
-
+    
     typcache = lookup_type_cache(input1->rangetypid, TYPECACHE_RANGE_INFO);
     if (input1->rangetypid != input2->rangetypid) {
         ereport(ERROR,
@@ -668,7 +668,6 @@ logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4R
     range1 = deserialize_RangeType(input1, typcache);
     range2 = deserialize_RangeType(input2, typcache);
     result = callback(range1, range2);
-
     return result;
 }
 
@@ -703,11 +702,12 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
                 errmsg("range type mismatch in arithmetic operation")));
     }
 
-    // deserialize, operate, return integer
+    // deserialize, operate, free, return integer
     set1 = deserialize_ArrayType(input1, typcache);
     set2 = deserialize_ArrayType(input2, typcache);
     result = callback(set1, set2);
-
+    pfree(set1.ranges);
+    pfree(set2.ranges);
     return result;
 }
 
@@ -775,7 +775,7 @@ set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElemen
 }
 
 /*
-// To be called inside a MAX aggregation call. This multiplies the Set and multiplicity together.
+// To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
 // neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
 // Parameter: ArrayType (data col), RangeType (multiplicity)
 // Returns: a ArrayType Datum as argument to MAX()
@@ -1208,9 +1208,9 @@ range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement)
 Int4RangeSet
 set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement)
 {
+    Int4RangeSet result;
     // return neutral so doesn't affect the aggregate
     if(mult.lower == 0) {
-        Int4RangeSet result;
         result.count = 1;
         result.containsNull = false;
         result.ranges = palloc(sizeof(Int4Range));
@@ -1228,9 +1228,13 @@ set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement)
         return result;
     }
 
-    return set1;
+    // caller owns deep copy result
+    result.count = set1.count;
+    result.containsNull = set1.containsNull;
+    result.ranges = palloc(sizeof(Int4Range) * set1.count);
+    memcpy(result.ranges, set1.ranges, sizeof(Int4Range) * set1.count);
+    return result;
 }
-
 
 /*
 // To be called inside a MIN aggregation call. This multiplies the range and multuplicity together.
@@ -1334,13 +1338,15 @@ combine_set_mult_min(PG_FUNCTION_ARGS)
 
     result = set_mult_combine_helper(set1, mult, neutral_element);
     output = serialize_ArrayType(result, typcacheSet);
+    pfree(set1.ranges);
+    pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
 
 /*
 // To be called inside a MAX aggregation call. This multiplies the Set and multiplicity together.
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
+// neutral_element is the only difference between min/max implementation. This value is HARDCODED as either intmax/intmin //FIXME
 // Parameter: ArrayType (data col), RangeType (multiplicity)
 // Returns: a ArrayType Datum as argument to MAX()
 */
@@ -1375,6 +1381,8 @@ combine_set_mult_max(PG_FUNCTION_ARGS)
 
     result = set_mult_combine_helper(set1, mult, neutral_element);
     output = serialize_ArrayType(result, typcacheSet);
+    pfree(set1.ranges);
+    pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
@@ -1396,11 +1404,21 @@ agg_min_set_transfunc(PG_FUNCTION_ARGS)
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){
+        MemoryContext aggcontext, old;
+        ArrayType *copy;
+
         if (PG_ARGISNULL(1)){
             PG_RETURN_NULL();
         }
         // othrwise value becomes the state
-        PG_RETURN_ARRAYTYPE_P(PG_GETARG_ARRAYTYPE_P(1));
+        // deep copy result
+        AggCheckCallContext(fcinfo, &aggcontext);
+        if (!AggCheckCallContext(fcinfo, &aggcontext))
+            elog(ERROR, "agg_min_set_transfunc called in non-aggregate context");
+        old = MemoryContextSwitchTo(aggcontext);
+        copy = PG_GETARG_ARRAYTYPE_P_COPY(1); 
+        MemoryContextSwitchTo(old);
+        PG_RETURN_ARRAYTYPE_P(copy);
     }
 
     // NULL input: return current state unchanged
@@ -1426,6 +1444,12 @@ agg_min_set_transfunc(PG_FUNCTION_ARGS)
     result_i4r = min_rangeSet(n_state_i4r, n_input_i4r);
     result = serialize_ArrayType(result_i4r, typcache);
 
+    pfree(state_i4r.ranges);
+    pfree(input_i4r.ranges);
+    pfree(n_state_i4r.ranges);
+    pfree(n_input_i4r.ranges);
+    pfree(result_i4r.ranges);
+
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
@@ -1446,11 +1470,21 @@ agg_max_set_transfunc(PG_FUNCTION_ARGS)
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){
+        MemoryContext aggcontext, old;
+        ArrayType *copy;
+
         if (PG_ARGISNULL(1)){
             PG_RETURN_NULL();
         }
         // othrwise value becomes the state
-        PG_RETURN_ARRAYTYPE_P(PG_GETARG_ARRAYTYPE_P(1));
+        // deep copy result
+        AggCheckCallContext(fcinfo, &aggcontext);
+        if (!AggCheckCallContext(fcinfo, &aggcontext))
+            elog(ERROR, "agg_min_set_transfunc called in non-aggregate context");
+        old = MemoryContextSwitchTo(aggcontext);
+        copy = PG_GETARG_ARRAYTYPE_P_COPY(1); 
+        MemoryContextSwitchTo(old);
+        PG_RETURN_ARRAYTYPE_P(copy);
     }
 
     // NULL input: return current state unchanged
@@ -1476,6 +1510,12 @@ agg_max_set_transfunc(PG_FUNCTION_ARGS)
     result_i4r = max_rangeSet(n_state_i4r, n_input_i4r);
     result = serialize_ArrayType(result_i4r, typcache);
     
+    pfree(state_i4r.ranges);
+    pfree(input_i4r.ranges);
+    pfree(n_state_i4r.ranges);
+    pfree(n_input_i4r.ranges);
+    pfree(result_i4r.ranges);
+
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
@@ -1529,7 +1569,7 @@ agg_count_transfunc(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
-
+// alex fix me
 Datum 
 agg_avg_range_transfunc(PG_FUNCTION_ARGS)
 {
@@ -1558,7 +1598,7 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
     typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
     curr = deserialize_RangeType(data, typcache);
     m = deserialize_RangeType(mult, typcache);
-    combSum = set_mult_combine_helper_sum()
+    combSum = range_mult_combine_helper_sum(curr, m, 0);
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){    
@@ -1566,7 +1606,7 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
         oldcontext = MemoryContextSwitchTo(aggcontext);
         state = (rAvgAggState *) palloc0(sizeof(rAvgAggState));
         state->sum = combSum;
-        state->count = range_mult_combine_helper_sum(curr, m,);
+        state->count = m;
         MemoryContextSwitchTo(oldcontext);      // return to callers context
         PG_RETURN_POINTER(state);
     }
@@ -1577,6 +1617,7 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
     state->sum = range_add_internal(state->sum, combSum);
     state->count = range_add_internal(state->count, m);
     MemoryContextSwitchTo(oldcontext);      // return to callers context
+    
     PG_RETURN_POINTER(state);
 }
 
