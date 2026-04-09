@@ -473,3 +473,24 @@ WHERE actual IS DISTINCT FROM expected;
 -- SELECT sum(combine_set_mult_sum(val, mult), 500, 100)
 -- FROM my_table
 -- WHERE set_lt(val, array[int4range(10,20)]) = true;
+
+
+ select 
+    sum(combine_set_mult_sum(val, mult), 500, 100),
+    num_range(sum(combine_set_mult_sum(val, mult), 500, 100))
+ from t_s_iv_ni_nir_0073f377a2;
+
+ -- compare unpruned vs pruned
+SELECT 
+    array_length(no_prune, 1)  as intervals_no_prune,
+    set_coverage(no_prune)     as coverage_no_prune,
+    array_length(pruned, 1)    as intervals_pruned,
+    set_coverage(pruned)       as coverage_pruned,
+FROM (
+    SELECT 
+        sum(combine_set_mult_sum(val, mult), 500, 100) as no_prune,
+        sum(combine_set_mult_sum(
+            prune_set_lt(val, array[int4range(1000, 1200)], false), 
+        mult), 500, 100) as pruned
+    FROM t_s_iv_n_9ece6d82ac
+) sub;

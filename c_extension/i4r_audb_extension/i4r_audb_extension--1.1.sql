@@ -118,6 +118,12 @@ LANGUAGE c;
 --------------------------------Helper functions------------------------------
 ------------------------------------------------------------------------------
 
+-- find total num ranges in set
+CREATE FUNCTION array_length(set int4range[])
+RETURNS int4
+AS 'MODULE_PATHNAME', 'array_length'
+LANGUAGE c;
+
 -- find total volume of interval
 CREATE FUNCTION range_coverage(range int4range)
 RETURNS int4

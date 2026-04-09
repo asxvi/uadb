@@ -41,6 +41,7 @@ PG_FUNCTION_INFO_V1(set_gte);
 PG_FUNCTION_INFO_V1(set_eq);
 
 /*(Helper Functions)*/
+PG_FUNCTION_INFO_V1(array_length);
 PG_FUNCTION_INFO_V1(range_coverage);
 PG_FUNCTION_INFO_V1(set_coverage);
 PG_FUNCTION_INFO_V1(lift_scalar);
@@ -389,6 +390,36 @@ DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
  // Helper Functions
 /////////////////////
 
+// find total num ranges in set
+Datum
+array_length(PG_FUNCTION_ARGS)
+{
+    ArrayType *input;
+    Int4RangeSet set;
+    TypeCacheEntry *typcache;
+    Oid elemType;
+    int64 total;
+
+    // check for NULLS. Diff from empty check
+    if (PG_ARGISNULL(0)){
+        PG_RETURN_NULL();
+    }
+
+    input = PG_GETARG_ARRAYTYPE_P(0);
+
+    if (ArrayGetNItems(ARR_NDIM(input), ARR_DIMS(input)) == 0) {
+        PG_RETURN_INT64(0);
+    }
+
+    elemType = ARR_ELEMTYPE(input);
+    typcache = lookup_type_cache(elemType, TYPECACHE_RANGE_INFO);
+    set = deserialize_ArrayType(input, typcache);
+    total = set.count;
+    pfree(set.ranges);
+    PG_RETURN_INT64(total);
+
+}
+
 // find total volume of interval
 Datum
 range_coverage(PG_FUNCTION_ARGS)
@@ -436,6 +467,7 @@ set_coverage(PG_FUNCTION_ARGS)
     typcache = lookup_type_cache(elemType, TYPECACHE_RANGE_INFO);
     set = deserialize_ArrayType(input, typcache);
 
+    total=0;
     for (i = 0; i < set.count; i++) {
         if (!set.ranges[i].isNull)
             total += (int64)((set.ranges[i].upper-1) - set.ranges[i].lower);
