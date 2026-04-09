@@ -149,6 +149,38 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     PG_RETURN_ARRAYTYPE_P(output);                                  \
 }
 
+#define DEFINE_SET_ARITHMETIC_FUNC2(func_name, internal_func)        \
+Datum func_name(PG_FUNCTION_ARGS)                                   \
+{                                                                   \
+    ArrayType *a1;                                                  \
+    ArrayType *a2;                                                  \
+    ArrayType *output;                                              \
+    bool a1_empty;                                                  \
+    bool a2_empty;                                                  \
+    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
+    a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
+    a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
+    a1_empty = (ArrayGetNItems(ARR_NDIM(a1), ARR_DIMS(a1)) == 0);  \
+    a2_empty = (ArrayGetNItems(ARR_NDIM(a2), ARR_DIMS(a2)) == 0);  \
+    if (a1_empty || a2_empty) {                                     \
+        Int4RangeSet s1, s2, result;                                \
+        Oid typeoid = a1_empty ? ARR_ELEMTYPE(a2) : ARR_ELEMTYPE(a1); \
+        TypeCacheEntry *tc = lookup_type_cache(typeoid, TYPECACHE_RANGE_INFO); \
+        s1.count = a1_empty ? 0 : 1; s1.ranges = NULL; s1.containsNull = false; \
+        s2.count = a2_empty ? 0 : 1; s2.ranges = NULL; s2.containsNull = false; \
+        result = internal_func(s1, s2);                             \
+        if (result.count == 0) {                                    \
+            if (result.ranges) pfree(result.ranges);                \
+            PG_RETURN_ARRAYTYPE_P(construct_empty_array(typeoid));  \
+        }                                                           \
+        output = serialize_ArrayType(result, tc);                   \
+        if (result.ranges) pfree(result.ranges);                    \
+        PG_RETURN_ARRAYTYPE_P(output);                              \
+    }                                                               \
+    output = arithmetic_set_helper(a1, a2, internal_func);          \
+    PG_RETURN_ARRAYTYPE_P(output);                                  \
+}
+
 /* takes in 2 RangeType parameters, and returns a 3VL boolean after comparison*/
 #define DEFINE_RANGE_LOGICAL_FUNC(func_name, internal_func)         \
 Datum func_name(PG_FUNCTION_ARGS)                                   \
@@ -614,18 +646,16 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
     set1 = deserialize_ArrayType(input1, typcache);
     set2 = deserialize_ArrayType(input2, typcache);
 
-
-    // is NULL
     if(set1.containsNull && set1.count == 1) {
         output = serialize_ArrayType(set2, typcache);
-        pfree(set1.ranges);
-        pfree(set2.ranges);
+        // pfree(set1.ranges);
+        // pfree(set2.ranges);
         return output;
     }
     else if(set2.containsNull && set2.count == 1) {
         output = serialize_ArrayType(set1, typcache);
-        pfree(set1.ranges);
-        pfree(set2.ranges);
+        // pfree(set1.ranges);
+        // pfree(set2.ranges);
         return output;
     }
 
