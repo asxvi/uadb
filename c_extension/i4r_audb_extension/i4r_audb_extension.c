@@ -103,7 +103,7 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
 /*(Defined MACROS)*/
 
 /// check for NULLS parameters. Different from empty range check
-// returns the parameter that is not null
+//  returns the parameter that is not null
 #define CHECK_BINARY_PGARG_NULL_ARGS()                          \
     do {                                                        \
         if (PG_ARGISNULL(0) && PG_ARGISNULL(1))                 \
@@ -114,7 +114,7 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
             PG_RETURN_DATUM(PG_GETARG_DATUM(0));                \
     } while (0)
 
-// check for NULL param on either PGARG(0) OR PGARG(1)
+// returns NULL on either PGARG(0) OR PGARG(1)
 #define CHECK_BINARY_PGARG_NULL_OR()                            \
     do {                                                        \
         if (PG_ARGISNULL(0) || PG_ARGISNULL(1))                 \
@@ -156,7 +156,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     RangeType *r1;                                                  \
     RangeType *r2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
+    CHECK_BINARY_PGARG_NULL_OR();                                 \
     r1 = PG_GETARG_RANGE_P(0);                                  \
     r2 = PG_GETARG_RANGE_P(1);                                  \
     rv = logical_range_helper(r1, r2, internal_func);               \
@@ -173,7 +173,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     ArrayType *a1;                                                  \
     ArrayType *a2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
+    CHECK_BINARY_PGARG_NULL_OR();                                 \
     a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
     a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
     rv = logical_set_helper(a1, a2, internal_func);                 \
@@ -277,8 +277,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
                                                                         \
     norm_result = normalize(result);                                    \
     output = serialize_ArrayType(norm_result, typcache);                \
-    if (result.ranges)                                                  \
-        pfree(result.ranges);                                           \
+    if (result.ranges)   pfree(result.ranges);                          \
+    if (norm_result.ranges) pfree(norm_result.ranges);                  \
     /*elog(INFO, "Type OID: %u", typcache->type_id);                    \
     elog(INFO, "serialize_ArrayType: set.count = %d", result.count);*/  \
     PG_RETURN_ARRAYTYPE_P(output);                                      \
@@ -294,7 +294,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     TypeCacheEntry *typcache;                                           \
     Int4RangeSet a, b, result, norm_result;                             \
                                                                         \
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)) {PG_RETURN_NULL();}         \
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2)) {PG_RETURN_NULL();} \
     a_range   = PG_GETARG_ARRAYTYPE_P(0);                               \
     b_range   = PG_GETARG_ARRAYTYPE_P(1);                               \
     direction = PG_GETARG_BOOL(2);                                      \
@@ -304,6 +304,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     a = deserialize_ArrayType(a_range, typcache);                       \
     b = deserialize_ArrayType(b_range, typcache);                       \
     result = internal_func (a, b, direction);                           \
+    if (a.ranges) pfree(a.ranges);                                      \
+    if (b.ranges) pfree(b.ranges);                                      \
     /* Nothing to return */                                             \
     if (result.count == 0 && !result.containsNull) {                    \
         PG_RETURN_NULL();                                               \
