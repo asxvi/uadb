@@ -119,7 +119,7 @@ LANGUAGE c;
 ------------------------------------------------------------------------------
 
 -- lift takes 1 int32 and returns its equivallent Int4Range 
-CREATE FUNCTION lift_scalar(a int4)
+CREATE FUNCTION lift_scalar(val int4)
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'lift_scalar'
 LANGUAGE c;
@@ -154,7 +154,7 @@ LANGUAGE c;
 
 ---------- SUM -----------
 
-CREATE FUNCTION combine_range_mult_sum(int4range, int4range) 
+CREATE FUNCTION combine_range_mult_sum(range int4range, mult int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'combine_range_mult_sum'
 LANGUAGE c;
@@ -170,12 +170,12 @@ create aggregate sum (int4range)
     sfunc = agg_sum_range_transfunc
 );
 
-CREATE FUNCTION combine_set_mult_sum(int4range[], int4range) 
+CREATE FUNCTION combine_set_mult_sum(set int4range[], mult int4range) 
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'combine_set_mult_sum'
 LANGUAGE c;
 
-CREATE FUNCTION agg_sum_set_transfunc(internal, int4range[], integer, integer) 
+CREATE FUNCTION agg_sum_set_transfunc(internal, set int4range[], resizeTrigger integer, reduceToSize integer) 
 RETURNS internal
 AS 'MODULE_PATHNAME', 'agg_sum_set_transfunc'
 LANGUAGE c;
@@ -185,32 +185,70 @@ RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'agg_sum_set_finalfunc'
 LANGUAGE c;
 
-create aggregate sum (int4range[], resizeTrigger integer, sizeLimit integer) 
+create aggregate sum (int4range[], resizeTrigger integer, reduceToSize integer) 
 (
     stype = internal,
     sfunc = agg_sum_set_transfunc,
     finalfunc = agg_sum_set_finalfunc
 );
 
+-- used for testing suite. Tracks more detailed internal state of sum aggregate
+-- and the effects of reduction
+-- Int4RangeSet ranges;
+-- int resizeTrigger;
+-- int sizeLimit;
+-- long reduceCalls;               //how many times reduceSize() fired
+-- long maxIntervalCount;          //peak number of intervals seen
+-- long totalIntervalCount;        //sum of counts across all agg
+-- long combineCalls;              //number of times merged new input
+CREATE TYPE sum_set_metrics AS (
+    result int4range[],
+    resizeTrigger bigint,
+    sizeLimit bigint,
+    reduceCalls bigint,
+    maxIntervalCount bigint,
+    totalIntervalCount bigint, 
+    combineCalls bigint,
+    minEffectiveIntervalCount bigint,
+    convergedToTotSize bigint
+);
+
+CREATE FUNCTION agg_sum_set_transfunc_metrics(internal, int4range[], integer, integer, bool) 
+RETURNS internal
+AS 'MODULE_PATHNAME', 'agg_sum_set_transfunc_metrics'
+LANGUAGE c;
+
+CREATE FUNCTION agg_sum_set_finalfunc_metrics(internal) 
+RETURNS sum_set_metrics
+AS 'MODULE_PATHNAME', 'agg_sum_set_finalfunc_metrics'
+LANGUAGE c;
+
+create aggregate sum_metrics (int4range[], resizeTrigger integer, sizeLimit integer, bool) 
+(
+    stype = internal,
+    sfunc = agg_sum_set_transfunc_metrics,
+    finalfunc = agg_sum_set_finalfunc_metrics
+);
+
 ---------- MIN/ MAX -----------
 -- not sure if this is more functions than need be
 
-CREATE FUNCTION combine_range_mult_min(int4range, int4range) 
+CREATE FUNCTION combine_range_mult_min(range int4range, mult int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'combine_range_mult_min'
 LANGUAGE c;
 
-CREATE FUNCTION combine_range_mult_max(int4range, int4range) 
+CREATE FUNCTION combine_range_mult_max(range int4range, mult int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'combine_range_mult_max'
 LANGUAGE c;
 
-CREATE FUNCTION agg_min_range_transfunc(int4range, int4range) 
+CREATE FUNCTION agg_min_range_transfunc(state int4range, input int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'agg_min_range_transfunc'
 LANGUAGE c;
 
-CREATE FUNCTION agg_max_range_transfunc(int4range, int4range) 
+CREATE FUNCTION agg_max_range_transfunc(state int4range, input int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'agg_max_range_transfunc'
 LANGUAGE c;
@@ -226,22 +264,22 @@ create aggregate max (int4range)
     sfunc = agg_max_range_transfunc
 );
 
-CREATE FUNCTION combine_set_mult_min(int4range[], int4range) 
+CREATE FUNCTION combine_set_mult_min(set int4range[], mult int4range) 
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'combine_set_mult_min'
 LANGUAGE c;
 
-CREATE FUNCTION combine_set_mult_max(int4range[], int4range) 
+CREATE FUNCTION combine_set_mult_max(set int4range[], mult int4range) 
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'combine_set_mult_max'
 LANGUAGE c;
 
-CREATE FUNCTION agg_min_set_transfunc(int4range[], int4range[]) 
+CREATE FUNCTION agg_min_set_transfunc(state int4range[], input int4range[]) 
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'agg_min_set_transfunc'
 LANGUAGE c;
 
-CREATE FUNCTION agg_max_set_transfunc(int4range[], int4range[]) 
+CREATE FUNCTION agg_max_set_transfunc(state int4range[], input int4range[]) 
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'agg_max_set_transfunc'
 LANGUAGE c;
@@ -265,7 +303,7 @@ create aggregate max (int4range[])
 );
 
 ---------- Count -----------
-CREATE FUNCTION agg_count_transfunc(int4range, int4range) 
+CREATE FUNCTION agg_count_transfunc(state int4range, input int4range) 
 RETURNS int4range
 AS 'MODULE_PATHNAME', 'agg_count_transfunc'
 LANGUAGE c;
@@ -278,7 +316,7 @@ create aggregate count (int4range)
 
 
 --------- AVERAGE ----------
-CREATE FUNCTION agg_avg_range_transfunc(internal, data int4range, mult int4range) 
+CREATE FUNCTION agg_avg_range_transfunc(state internal, range int4range, mult int4range) 
 RETURNS internal
 AS 'MODULE_PATHNAME', 'agg_avg_range_transfunc'
 LANGUAGE c;
@@ -295,64 +333,9 @@ create aggregate avg (data int4range, mult int4range)
     finalfunc = agg_avg_range_finalfunc
 );
 
-
-
-    
--- Int4RangeSet ranges;
--- int resizeTrigger;
--- int sizeLimit;
--- long reduceCalls;               //how many times reduceSize() fired
--- long maxIntervalCount;          //peak number of intervals seen
--- long totalIntervalCount;        //sum of counts across all agg
--- long combineCalls;              //number of times merged new input
-
-CREATE TYPE sum_set_metrics AS (
-    result int4range[],
-    resizeTrigger bigint,
-    sizeLimit bigint,
-    reduceCalls bigint,
-    maxIntervalCount bigint,
-    totalIntervalCount bigint, 
-    combineCalls bigint,
-    minEffectiveIntervalCount bigint,
-    convergedToTotSize bigint
-);
-
-CREATE FUNCTION agg_sum_set_transfuncTest(internal, int4range[], integer, integer, bool) 
-RETURNS internal
-AS 'MODULE_PATHNAME', 'agg_sum_set_transfuncTest'
-LANGUAGE c;
-
-CREATE FUNCTION agg_sum_set_finalfuncTest(internal) 
-RETURNS sum_set_metrics
-AS 'MODULE_PATHNAME', 'agg_sum_set_finalfuncTest'
-LANGUAGE c;
-
-create aggregate sumTest (int4range[], resizeTrigger integer, sizeLimit integer, bool) 
-(
-    stype = internal,
-    sfunc = agg_sum_set_transfuncTest,
-    finalfunc = agg_sum_set_finalfuncTest
-);
-
--- CREATE FUNCTION agg_sum_set_transfuncTestNN(internal, int4range[], integer, integer, bool) 
--- RETURNS internal
--- AS 'MODULE_PATHNAME', 'agg_sum_set_transfuncTestNN'
--- LANGUAGE c;
-
--- create aggregate sumTestNN (int4range[], resizeTrigger integer, sizeLimit integer, bool) 
--- (
---     stype = internal,
---     sfunc = agg_sum_set_transfuncTestNN,
---     finalfunc = agg_sum_set_finalfuncTest
--- );
-
-
-
 ----------------------------------------------------------------------------
 ---------------------------Prune functions-----------------------------
 ----------------------------------------------------------------------------
-
 
 CREATE FUNCTION prune_range_lt(a int4range, b int4range, direction boolean) 
 RETURNS int4range
@@ -428,47 +411,3 @@ CREATE FUNCTION prune_set_or(a int4range[], b int4range[])
 RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'prune_set_or'
 LANGUAGE C STRICT;
-
-select 
-    set_normalize(array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)]),
-    set_normalize(array[int4range(2,5), int4range(5,10), int4range(7,14)]),
-    prune_set_lt(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        false
-    ),
-    prune_set_lt(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        true
-    ),
-    prune_set_lte(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        false
-    ),
-    prune_set_lte(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        true
-    ),
-    prune_set_gt(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        false
-    ),
-    prune_set_gt(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        true
-    ),
-    prune_set_gte(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        false
-    ),
-    prune_set_gte(
-        array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
-        array[int4range(2,5), int4range(5,10), int4range(7,14)],
-        true
-    );

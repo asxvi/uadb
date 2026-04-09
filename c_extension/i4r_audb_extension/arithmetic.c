@@ -97,6 +97,7 @@ Int4Range range_divide_internal(Int4Range a, Int4Range b){
     return rv;
 }
 
+
 // Used for continuous boundaries where we want 1 range, rather a set of ranges
 Int4Range floatIntervalSetMult(Int4RangeSet a, Multiplicity mult) {
     Int4RangeSet multSet;
@@ -153,6 +154,10 @@ Int4RangeSet range_set_add_internal(Int4RangeSet a, Int4RangeSet b){
     size_t i;
     size_t j;
 
+    // if (a.count == 0 && b.count == 0) return empty_set();
+    // if (a.count == 0) return deep_copy(b);
+    // if (b.count == 0) return deep_copy(a);
+
     // check NULL-only case. returns our null representation
     if (a.count == 1 && a.containsNull &&
         b.count == 1 && b.containsNull) {
@@ -207,6 +212,9 @@ Int4RangeSet range_set_subtract_internal(Int4RangeSet a, Int4RangeSet b){
     size_t i;
     size_t j;
 
+    // if (a.count == 0) return empty_set();
+    // if (b.count == 0) return deep_copy(a);
+
     // NULL guarentee if first parameter is {NULL}
     if (a.count == 1 && a.containsNull) {
         rv.count = 1;
@@ -259,6 +267,8 @@ Int4RangeSet range_set_multiply_internal(Int4RangeSet a, Int4RangeSet b){
     size_t idx;
     size_t i;
     size_t j;
+    
+    // if (a.count == 0 || b.count == 0) return empty_set();
 
     // check NULL-only case. returns our null representation
     if ((a.count == 1 && a.containsNull) ||
@@ -313,6 +323,8 @@ Int4RangeSet range_set_divide_internal(Int4RangeSet a, Int4RangeSet b){
     size_t idx;
     size_t i;
     size_t j;
+    
+    // if (a.count == 0 || b.count == 0) return empty_set();
     
     // check NULL-only case. returns our null representation
     if ((a.count == 1 && a.containsNull) ||

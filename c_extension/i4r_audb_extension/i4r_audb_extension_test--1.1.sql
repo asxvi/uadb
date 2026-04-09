@@ -58,13 +58,13 @@ INSERT INTO t2_s_arithmetic VALUES
     ('divide_basic', 'set_divide(array[int4range(10,13), int4range(20,41)], array[int4range(2,3), int4range(4,5)])', set_divide(array[int4range(10,13), int4range(20,41)], array[int4range(2,3), int4range(4,5)]), array[int4range(5,7), int4range(2,4), int4range(10,21), int4range(5,11)]),
     
     -- empty cases- add
-    ('set_add_empty_param1', 'set_add(array[]::int4range[], array[int4range(1,5)])', set_add(array[]::int4range[], array[int4range(1,5)]), array[int4range(1,5)]),
-    ('set_add_empty_param2', 'set_add(array[int4range(1,5)], array[]::int4range[])', set_add(array[int4range(1,5)], array[]::int4range[]), array[int4range(1,5)]),
+    ('set_add_empty_param1', 'set_add(array[]::int4range[], array[int4range(1,5)])', set_add(array[]::int4range[], array[int4range(1,5)]), array[]::int4range[]),
+    ('set_add_empty_param2', 'set_add(array[int4range(1,5)], array[]::int4range[])', set_add(array[int4range(1,5)], array[]::int4range[]), array[]::int4range[]),
     ('set_add_both_empty', 'set_add(array[]::int4range[], array[]::int4range[])', set_add(array[]::int4range[], array[]::int4range[]), array[]::int4range[]),
     
     -- empty cases- sub
     ('set_subtract_empty_param1', 'set_subtract(array[]::int4range[], array[int4range(1,5)])', set_subtract(array[]::int4range[], array[int4range(1,5)]), array[]::int4range[]),
-    ('set_subtract_empty_param2', 'set_subtract(array[int4range(1,5)], array[]::int4range[])', set_subtract(array[int4range(1,5)], array[]::int4range[]), array[int4range(1,5)]),
+    ('set_subtract_empty_param2', 'set_subtract(array[int4range(1,5)], array[]::int4range[])', set_subtract(array[int4range(1,5)], array[]::int4range[]), array[]::int4range[]),
     ('set_subtract_both_empty', 'set_subtract(array[]::int4range[], array[]::int4range[])', set_subtract(array[]::int4range[], array[]::int4range[]), array[]::int4range[]),
     
     -- empty cases- mult
@@ -425,13 +425,46 @@ FROM t7_s_aggregates
 WHERE actual IS DISTINCT FROM expected;
 
 
-
-
--- say we are working with sets of ranges:
-
--- A  | B | multiplicity
--- {(1,2), (10,12)} | {(8,14)} | (1,1)
-
--- select a from r where a =b;
-
--- 1) translate select into using our 
+-- select 
+--     set_normalize(array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)]),
+--     set_normalize(array[int4range(2,5), int4range(5,10), int4range(7,14)]),
+--     prune_set_lt(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         false
+--     ),
+--     prune_set_lt(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         true
+--     ),
+--     prune_set_lte(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         false
+--     ),
+--     prune_set_lte(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         true
+--     ),
+--     prune_set_gt(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         false
+--     ),
+--     prune_set_gt(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         true
+--     ),
+--     prune_set_gte(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         false
+--     ),
+--     prune_set_gte(
+--         array[int4range(1,4), int4range(5,7), int4range(6,12), int4range(20,32)],
+--         array[int4range(2,5), int4range(5,10), int4range(7,14)],
+--         true
+--     );

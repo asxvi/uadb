@@ -70,10 +70,10 @@ PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);
 PG_FUNCTION_INFO_V1(combine_set_mult_sum);
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc);
+PG_FUNCTION_INFO_V1(agg_sum_set_transfunc_metrics);
+PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc_metrics);
+// PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTestNN);
 
-PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTest);
-PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTestNN);
-PG_FUNCTION_INFO_V1(agg_sum_set_finalfuncTest);
 
 //          min/max
 PG_FUNCTION_INFO_V1(combine_range_mult_min);
@@ -142,41 +142,9 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     ArrayType *a1;                                                  \
     ArrayType *a2;                                                  \
     ArrayType *output;                                              \
-    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
+    CHECK_BINARY_PGARG_NULL_OR();                                 \
     a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
     a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
-    output = arithmetic_set_helper(a1, a2, internal_func);          \
-    PG_RETURN_ARRAYTYPE_P(output);                                  \
-}
-
-#define DEFINE_SET_ARITHMETIC_FUNC2(func_name, internal_func)        \
-Datum func_name(PG_FUNCTION_ARGS)                                   \
-{                                                                   \
-    ArrayType *a1;                                                  \
-    ArrayType *a2;                                                  \
-    ArrayType *output;                                              \
-    bool a1_empty;                                                  \
-    bool a2_empty;                                                  \
-    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
-    a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
-    a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
-    a1_empty = (ArrayGetNItems(ARR_NDIM(a1), ARR_DIMS(a1)) == 0);  \
-    a2_empty = (ArrayGetNItems(ARR_NDIM(a2), ARR_DIMS(a2)) == 0);  \
-    if (a1_empty || a2_empty) {                                     \
-        Int4RangeSet s1, s2, result;                                \
-        Oid typeoid = a1_empty ? ARR_ELEMTYPE(a2) : ARR_ELEMTYPE(a1); \
-        TypeCacheEntry *tc = lookup_type_cache(typeoid, TYPECACHE_RANGE_INFO); \
-        s1.count = a1_empty ? 0 : 1; s1.ranges = NULL; s1.containsNull = false; \
-        s2.count = a2_empty ? 0 : 1; s2.ranges = NULL; s2.containsNull = false; \
-        result = internal_func(s1, s2);                             \
-        if (result.count == 0) {                                    \
-            if (result.ranges) pfree(result.ranges);                \
-            PG_RETURN_ARRAYTYPE_P(construct_empty_array(typeoid));  \
-        }                                                           \
-        output = serialize_ArrayType(result, tc);                   \
-        if (result.ranges) pfree(result.ranges);                    \
-        PG_RETURN_ARRAYTYPE_P(output);                              \
-    }                                                               \
     output = arithmetic_set_helper(a1, a2, internal_func);          \
     PG_RETURN_ARRAYTYPE_P(output);                                  \
 }
@@ -648,14 +616,14 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
 
     if(set1.containsNull && set1.count == 1) {
         output = serialize_ArrayType(set2, typcache);
-        // pfree(set1.ranges);
-        // pfree(set2.ranges);
+        pfree(set1.ranges);
+        pfree(set2.ranges);
         return output;
     }
     else if(set2.containsNull && set2.count == 1) {
         output = serialize_ArrayType(set1, typcache);
-        // pfree(set1.ranges);
-        // pfree(set2.ranges);
+        pfree(set1.ranges);
+        pfree(set2.ranges);
         return output;
     }
 
@@ -1603,7 +1571,6 @@ agg_count_transfunc(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
-// alex fix me
 Datum 
 agg_avg_range_transfunc(PG_FUNCTION_ARGS)
 {
@@ -1678,94 +1645,106 @@ agg_avg_range_finalfunc(PG_FUNCTION_ARGS)
 }
 
 // FIXME. do not remember what was wrong here. i think set division trips me up because of the rounding
-/////////////////
-//// set avg ////
-/////////////////
-// Datum 
-// agg_avg_set_transfunc(PG_FUNCTION_ARGS)
-// {
-//     MemoryContext aggcontext;
-//     MemoryContext oldcontext;
-//     ArrayType *data;
-//     RangeType *mult;
-//     Int4RangeSet curr;
-//     Int4Range m;
-//     Int4RangeSet combSum;
-//     sAvgAggState *state;
-//     TypeCacheEntry *typcache;
+///////////////
+// set avg ////
+///////////////
+Datum 
+agg_avg_set_transfunc(PG_FUNCTION_ARGS)
+{
+    MemoryContext aggcontext;
+    MemoryContext oldcontext;
+    ArrayType *data;
+    RangeType *mult;
+    Int4RangeSet curr;
+    Int4Range m;
+    Int4RangeSet combSum;
+    sAvgAggState *state;
+    TypeCacheEntry *typcacheSet, *typcacheMult;
 
-//     if (!AggCheckCallContext(fcinfo, &aggcontext)) {
-//         elog(ERROR, "avg_range_transfunc called in non-aggregate context");
-//     }
+    if (!AggCheckCallContext(fcinfo, &aggcontext)) {
+        elog(ERROR, "avg_range_transfunc called in non-aggregate context");
+    }
 
-//     // ignore NULL rows
-//     if (PG_ARGISNULL(1) || PG_ARGISNULL(2))
-//     {
-//         if (PG_ARGISNULL(0)) {
-//             PG_RETURN_NULL();
-//         }
-//         PG_RETURN_POINTER(PG_GETARG_POINTER(0));
-//     }
+    // ignore NULL rows
+    if (PG_ARGISNULL(1) || PG_ARGISNULL(2))
+    {
+        if (PG_ARGISNULL(0)) {
+            PG_RETURN_NULL();
+        }
+        PG_RETURN_POINTER(PG_GETARG_POINTER(0));
+    }
     
-//     // get curr State values
-//     data = PG_GETARG_RANGE_P(1);
-//     mult = PG_GETARG_RANGE_P(2);
-//     typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
+    // get curr State values
+    data = PG_GETARG_ARRAYTYPE_P(1);
+    mult = PG_GETARG_RANGE_P(2);
+    typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
+    typcacheMult = lookup_type_cache(mult->rangetypid, TYPECACHE_RANGE_INFO);
+    curr = deserialize_ArrayType(data, typcacheSet);
+    m = deserialize_RangeType(mult, typcacheMult);
+    combSum = set_mult_combine_helper_sum(curr, m, 0);
 
-//     // first call: use the first input as initial state, or non null
-//     if (PG_ARGISNULL(0)){    
-//         // switch to aggregate memory context for persistent allocations
-//         oldcontext = MemoryContextSwitchTo(aggcontext);
+    // first call: use the first input as initial state, or non null
+    if (PG_ARGISNULL(0)){    
+        // switch to aggregate memory context for persistent allocations
+        oldcontext = MemoryContextSwitchTo(aggcontext);
+        state = (sAvgAggState *) palloc0(sizeof(sAvgAggState));
+        range_set_add_internal(state->sum, combSum);
+        state->count = range_add_internal(state->count, m);
+        MemoryContextSwitchTo(oldcontext);      // return to callers context
 
-//         state = (rAvgAggState *) palloc0(sizeof(rAvgAggState));
-//         state->sum = deserialize_RangeType(data, typcache);
-//         state->count = deserialize_RangeType(mult, typcache);
-        
-//         // need to return to callers context
-//         MemoryContextSwitchTo(oldcontext);
-        
-//         PG_RETURN_POINTER(state);
-//     }
+        PG_RETURN_POINTER(state);
+    }
 
-//     // otherwise merge into existing state
-//     state = (rAvgAggState *) PG_GETARG_POINTER(0);
+    // otherwise merge into existing state
+    state = (sAvgAggState *) PG_GETARG_POINTER(0);
+    oldcontext   = MemoryContextSwitchTo(aggcontext);
+    state->sum   = range_set_add_internal(state->sum, combSum);
+    state->count = range_add_internal(state->count, m);
+    MemoryContextSwitchTo(oldcontext);
 
-//     curr = deserialize_RangeType(data, typcache);
-//     m = deserialize_RangeType(mult, typcache);
+    // free temporaries allocated in caller context
+    if (curr.ranges)    pfree(curr.ranges);
+    if (combSum.ranges) pfree(combSum.ranges);
+
+    PG_RETURN_POINTER(state);
+}
+
+Datum
+agg_avg_set_finalfunc(PG_FUNCTION_ARGS)
+{
+    sAvgAggState *state;
+    TypeCacheEntry *typcache;
+    Int4RangeSet avg, liftedCount;
+    ArrayType *result;
+    Oid elemTypeOID;
+
+    if (PG_ARGISNULL(0))
+        PG_RETURN_NULL();
+
+    state = (sAvgAggState *) PG_GETARG_POINTER(0);
+
+    if (state->sum.count == 0) {
+        elemTypeOID = TypenameGetTypid("int4range");
+        PG_RETURN_ARRAYTYPE_P(construct_empty_array(elemTypeOID));
+    }
+
+    elemTypeOID = TypenameGetTypid("int4range");
+    typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
     
-//     combSum = range_mult_combine_helper_sum(curr, m, 0);
-//     range_add_internal(state->sum, combSum);
-//     range_add_internal(state->count, m);
-
-//     PG_RETURN_POINTER(state);
-// }
-
-// Datum 
-// agg_avg_set_finalfunc(PG_FUNCTION_ARGS)
-// {
-//     rAvgAggState *state;
-//     TypeCacheEntry *typcache;
-//     Int4Range avg;
-//     RangeType *result;
-
-//     if (PG_ARGISNULL(0)) {
-//         PG_RETURN_NULL();
-//     }
-
-//     state = (rAvgAggState*) PG_GETARG_POINTER(0);
-//     avg = range_divide_internal(state->sum, state->count);
+    liftedCount = lift_range(state->count);
+    avg = range_set_divide_internal(state->sum, liftedCount);
+    result = serialize_ArrayType(avg, typcache);
     
-//     typcache = lookup_type_cache(INT4RANGEOID, TYPECACHE_RANGE_INFO);
-
-//     result = serialize_RangeType(avg, typcache);
+    if (liftedCount.ranges) pfree(liftedCount.ranges);
+    if (avg.ranges) pfree(avg.ranges);
     
-//     PG_RETURN_RANGE_P(result);
-// }
-
+    PG_RETURN_ARRAYTYPE_P(result);
+}
 
 
 
 /*
+// ** USED FOR INTERNAL TESTING SUITE
 *   transition function for sum(combine_set_mult_sum(data, mult), resizetrigger, sizelimit)
 *   
 * Parameters [4]:
@@ -1778,7 +1757,7 @@ agg_avg_range_finalfunc(PG_FUNCTION_ARGS)
 *   - Datum (pointer to SumAggState) 
 */
 Datum
-agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
+agg_sum_set_transfunc_metrics(PG_FUNCTION_ARGS)
 {
     MemoryContext aggcontext;
     MemoryContext oldcontext;
@@ -1926,7 +1905,7 @@ agg_sum_set_transfuncTest(PG_FUNCTION_ARGS)
     * number of times merged new input = num rows in dataset
 */
 Datum
-agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
+agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
 {
     SumAggStateTest *state;
     // Int4RangeSet normResult;
@@ -1983,117 +1962,4 @@ agg_sum_set_finalfuncTest(PG_FUNCTION_ARGS)
 
     tuple = heap_form_tuple(tupdesc, values, nulls);
     return HeapTupleGetDatum(tuple);
-}
-
-
-
-Datum
-agg_sum_set_transfuncTestNN(PG_FUNCTION_ARGS)
-{
-    MemoryContext aggcontext;
-    MemoryContext oldcontext;
-    SumAggStateTest *state;
-    ArrayType *currSet;
-    TypeCacheEntry *typcache;
-    Int4RangeSet inputSet, combined, normalized, newState;
-    
-    if (!AggCheckCallContext(fcinfo, &aggcontext))
-        elog(ERROR, "agg_sum_set_transfunc called in non-aggregate context");
-    
-    // first call, state is NULL
-    if (PG_ARGISNULL(0)) {
-
-        // check for NULL input param, or empty
-        if (PG_ARGISNULL(1)) {
-            PG_RETURN_NULL();
-        }
-        
-        currSet = PG_GETARG_ARRAYTYPE_P(1);
-        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
-        
-        // empty set, continue on until non empty
-        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
-            PG_RETURN_NULL();
-        }
-
-        // switch to aggregate memory context for persistent allocations
-        oldcontext = MemoryContextSwitchTo(aggcontext);
-        
-        // internal state init
-        state = (SumAggStateTest *) palloc0(sizeof(SumAggStateTest));
-        state->ranges = deserialize_ArrayType(currSet, typcache);
-        state->resizeTrigger = PG_GETARG_INT32(2);
-        state->sizeLimit = PG_GETARG_INT32(3);
-        state->callNormalize = PG_GETARG_BOOL(4);
-        
-        state->reduceCalls = 0;
-        state->combineCalls = 1;
-        state->maxIntervalCount = state->ranges.count;
-        state->totalIntervalCount = state->ranges.count;
-        
-        // need to return to callers context
-        MemoryContextSwitchTo(oldcontext);
-        
-        PG_RETURN_POINTER(state);
-    }
-    
-    // otherwise merge into existing state
-    state = (SumAggStateTest *) PG_GETARG_POINTER(0);
-
-    if (!PG_ARGISNULL(1)) {
-        currSet = PG_GETARG_ARRAYTYPE_P(1);
-        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
-
-        // empty check
-        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
-            PG_RETURN_POINTER(state);
-        }
-        
-        // deserialize input in current context (freed later)
-        inputSet = deserialize_ArrayType(currSet, typcache);
-        
-        // agg context persists data
-        oldcontext = MemoryContextSwitchTo(aggcontext);
-        combined = range_set_add_internal(state->ranges, inputSet);
-        
-        state->combineCalls++;
-        state->totalIntervalCount += combined.count;
-        if (combined.count > state->maxIntervalCount) {
-            state->maxIntervalCount = combined.count;
-        }
-
-        // free old ranges
-        if (state->ranges.ranges != NULL) {
-            pfree(state->ranges.ranges);
-        }
-        
-        // check reduce size
-        if (combined.count >= state->resizeTrigger) {
-            newState = reduceSizeNN(combined, state->sizeLimit);
-            pfree(combined.ranges);
-            state->reduceCalls++;
-        }
-        else {
-            newState = combined;
-            // NOTE test normalize here and not here
-        }
-
-        if (state->callNormalize) {
-            normalized = normalize(newState);
-            if (newState.ranges != combined.ranges)
-                pfree(newState.ranges);
-
-            newState = normalized;
-        }
-
-        state->ranges = newState;
-
-        
-        MemoryContextSwitchTo(oldcontext);
-        
-        // free previous memory context
-        pfree(inputSet.ranges);
-    }
-    
-    PG_RETURN_POINTER(state);
 }
