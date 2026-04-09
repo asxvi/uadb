@@ -156,9 +156,9 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     RangeType *r1;                                                  \
     RangeType *r2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_OR();                                 \
-    r1 = PG_GETARG_RANGE_P(0);                                  \
-    r2 = PG_GETARG_RANGE_P(1);                                  \
+    CHECK_BINARY_PGARG_NULL_OR();                                   \
+    r1 = PG_GETARG_RANGE_P(0);                                      \
+    r2 = PG_GETARG_RANGE_P(1);                                      \
     rv = logical_range_helper(r1, r2, internal_func);               \
     if (rv == -1){                                                  \
         PG_RETURN_NULL();                                           \
@@ -173,7 +173,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     ArrayType *a1;                                                  \
     ArrayType *a2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_OR();                                 \
+    CHECK_BINARY_PGARG_NULL_OR();                                   \
     a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
     a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
     rv = logical_set_helper(a1, a2, internal_func);                 \

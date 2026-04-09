@@ -64,9 +64,9 @@ int set_greater_than(Int4RangeSet a, Int4RangeSet b){
     Int4RangeSet n1;
     Int4RangeSet n2;
     
-    if (a.count == 0 || b.count == 0){
-        return -1;
-    }
+    if (a.count == 0 && b.count == 0) return 0;
+    if (b.count == 0) return 1;
+    if (a.count == 0) return 0;
     
     result = -1;
     n1 = normalize(a);
@@ -102,9 +102,9 @@ int set_greater_than_equal(Int4RangeSet a, Int4RangeSet b){
     Int4RangeSet n1;
     Int4RangeSet n2;
     
-    if (a.count == 0 || b.count == 0){
-        return -1;
-    }
+    if (a.count == 0 && b.count == 0) return 1;
+    if (b.count == 0) return 1;
+    if (a.count == 0) return 0;
     
     result = -1;
     n1 = normalize(a);
@@ -141,9 +141,9 @@ int set_less_than(Int4RangeSet a, Int4RangeSet b){
     Int4RangeSet n1;
     Int4RangeSet n2;
     
-    if (a.count == 0 || b.count == 0){
-        return -1;
-    }
+    if (a.count == 0 && b.count == 0) return 0;
+    if (a.count == 0) return 1;
+    if (b.count == 0) return 0;
     
     result = -1;
     n1 = normalize(a);
@@ -179,9 +179,9 @@ int set_less_than_equal(Int4RangeSet a, Int4RangeSet b){
     Int4RangeSet n1;
     Int4RangeSet n2;
     
-    if (a.count == 0 || b.count == 0){
-        return -1;
-    }
+    if (a.count == 0 && b.count == 0) return 1;
+    if (a.count == 0) return 1;
+    if (b.count == 0) return 0;
     
     result = -1;
     n1 = normalize(a);
