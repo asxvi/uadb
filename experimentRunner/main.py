@@ -270,7 +270,7 @@ class ExperimentRunner:
             'min_time' : None,
             'max_time' : None,
             'sum_time' : None,
-            'sumtest_time': None,
+            'sumMetrics_time': None,
             'sum_test_result' : None,
             'reduce_calls' : None,
             'max_interval_count': None,
@@ -288,7 +288,7 @@ class ExperimentRunner:
             ('min_time', 'MIN', config['combine_min'], []),
             ('max_time', 'MAX', config['combine_max'], []),
             ('sum_time', 'SUM', config['combine_sum'], list(experiment.reduce_triggerSz_sizeLim)),
-            ('sumtest_time', 'SUMTEST', config['combine_sum'], [experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE])
+            ('sumMetrics_time', 'SUM_METRICS', config['combine_sum'], [experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE])
         ]
         random.shuffle(agg_jobs)            # shuffle bc of bias for warm cache later on. ideally average out a bit 
 
@@ -305,8 +305,8 @@ class ExperimentRunner:
                 for key, agg, func, params in agg_jobs:
                     results[key] = self.__run_aggregate(cur, table, agg, func, *params)
                 
-                # get additional results for sumtest. Run experiment and time profile once each
-                metrics = self.__get_sumtest_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
+                # get additional results for sumMetrics. Run experiment and time profile once each
+                metrics = self.__get_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
                 if metrics: 
                     results['sum_test_result'] = metrics['result']
                     results['reduce_calls'] = metrics['reduce_calls']
@@ -556,8 +556,8 @@ class ExperimentRunner:
         
         return result_value
     
-    def __get_sumtest_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
-        '''get SUMTEST metrics from composite type result using field accessors'''
+    def __get_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
+        '''get sum_metrics metrics from composite type result using field accessors'''
         
         sql = f"""
             SELECT 
@@ -571,7 +571,7 @@ class ExperimentRunner:
                 (result).minEffectiveIntervalCount,
                 (result).convergedToTotSize
             FROM (
-                (SELECT sumTest({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
+                (SELECT sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
                 FROM {table})) subq;"""
         
         cur.execute(sql)
@@ -645,7 +645,7 @@ class ExperimentRunner:
         min_times = extract('min_time')
         max_times = extract('max_time')
         sum_times = extract('sum_time')
-        sumtest_times = extract('sumtest_time')
+        sumMetrics_time = extract('sumMetrics_time')
 
         sum_results = trial_results[0].get('sum_test_result') if trial_results else None   # actual result
         reduce_calls = extract('reduce_calls')
@@ -689,8 +689,8 @@ class ExperimentRunner:
             # SUM stats 
             'sum_time_mean': np.mean(sum_times) if sum_times else None,
             'sum_time_std': np.std(sum_times) if sum_times else None,
-            'sumtest_time_mean': np.mean(sumtest_times) if sumtest_times else None,
-            'sumtest_time_std': np.std(sumtest_times) if sumtest_times else None,
+            'sumMetrics_time_mean': np.mean(sumMetrics_time) if sumMetrics_time else None,
+            'sumMetrics_time_std': np.std(sumMetrics_time) if sumMetrics_time else None,
             
             # reduction stats
             'sum_results': sum_results if sum_results else None,

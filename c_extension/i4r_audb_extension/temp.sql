@@ -39,7 +39,7 @@ FROM (
 -- vs sumtest
 
 SELECT
-    sumtest(combine_set_mult_sum(val, mult), 500, 100, false)
+    sum_metrics(combine_set_mult_sum(val, mult), 500, 100, false)
 FROM (
     select * from t_s_iv_n_9ece6d82ac limit 100
 ) sub;

@@ -1677,7 +1677,7 @@ agg_avg_set_transfunc(PG_FUNCTION_ARGS)
     // get curr State values
     data = PG_GETARG_ARRAYTYPE_P(1);
     mult = PG_GETARG_RANGE_P(2);
-    typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
+    typcacheSet = lookup_type_cache(ARR_ELEMTYPE(data), TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult->rangetypid, TYPECACHE_RANGE_INFO);
     curr = deserialize_ArrayType(data, typcacheSet);
     m = deserialize_RangeType(mult, typcacheMult);
@@ -1908,8 +1908,7 @@ Datum
 agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
 {
     SumAggStateTest *state;
-    // Int4RangeSet normResult;
-    Int4RangeSet reduced;
+    Int4RangeSet normalized, reduced;
     Datum values[9];
     bool nulls[9] = {false,false,false,false,false,false,false,false,false};
     HeapTuple tuple;
@@ -1931,20 +1930,29 @@ agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
         elog(ERROR, "int4range type not found in catalog");
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
 
-    // reduce final time
-    reduced = state->ranges;
-    if (state->ranges.count >= state->resizeTrigger) {
-        reduced = reduceSize(state->ranges, state->sizeLimit);
+    // always normalize on final call
+    normalized = normalize(state->ranges);
+    
+    // optionally reduce if the normalized result is still smaller than the size limit
+    if (normalized.count >= state->resizeTrigger) {
+        reduced = reduceSize(normalized, state->sizeLimit);
+        pfree(normalized.ranges);
+        arr = serialize_ArrayType(reduced, typcache);
+        currentSpan = totalSpan(reduced);
+        currentCount = reduced.count;
+        pfree(reduced.ranges);
+    }
+    else {
+        arr = serialize_ArrayType(normalized, typcache);
+        currentSpan = totalSpan(normalized);
+        currentCount = normalized.count;
+        pfree(normalized.ranges);
     }
 
-
-    // attemp to track when collapse occurs and min width/ num ranges
-    currentSpan = totalSpan(reduced);
-    currentCount = reduced.count;
+    // track metadata
     state->minEffectiveIntervalCount = currentCount;
     state->convergedToTotSize = currentSpan;
 
-    arr = serialize_ArrayType(reduced, typcache);
     values[0] = PointerGetDatum(arr);
     values[1] = Int64GetDatum(state->resizeTrigger);
     values[2] = Int64GetDatum(state->sizeLimit);
