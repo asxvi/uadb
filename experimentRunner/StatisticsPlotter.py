@@ -45,7 +45,9 @@ class StatisticsPlotter:
         # self.plot_gap_vs_time_vs_underreduction(df)
         # self.plot_efficiency_vs_ni(df)
         # self.plot_time_vs_coverage_all_ni(df)
-        self.plot_efficiency_vs_iv(df)
+        
+        
+        # self.plot_efficiency_vs_iv(df)            #uncomment this later
         self.plot_time_vs_coverage_all_iv(df)
     
         print("Results saved in: ", self.resultFilepath)

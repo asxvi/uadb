@@ -42,12 +42,13 @@ def ni_sweep(ni_list: int, n: int, trigger_size, reduce_to_size):
             interval_width_range     = (1, 2),
             num_intervals            = ni,
             reduce_triggerSz_sizeLim = (trigger_size, reduce_to_size),
+            prune                    = True,
         )
 
         experiment.name = format_name(experiment)
         group.experiments[experiment.name] = experiment
 
-    return group
+    return group    
 
 # ================ #
 def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
@@ -69,7 +70,7 @@ def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
 ni_list = make_log_sweep(1, 15, 8)
 
 plot_ni_gap_sweep(ni_list, 100)
-# plot_ni_gap_sweep(ni_list, 200)
-# plot_ni_gap_sweep(ni_list, 400)
+plot_ni_gap_sweep(ni_list, 200)
+plot_ni_gap_sweep(ni_list, 400)
 
 

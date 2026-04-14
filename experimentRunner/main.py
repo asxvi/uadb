@@ -87,6 +87,7 @@ class ExperimentSettings:
     gap_size_sequence: list = None  # sequence of gaps. allows for creating outlier ex. [5, 5, 5, 10000]
     gap_seq_formula_str: str = None # exact formula of gap_size_sequence
     
+    prune: bool = False
     mode: str = None                # NOT USED YET what modes of test suite to execute
     save_ddl:bool = False           # store ddl code to make tables 
     save_csv: bool = True           # store csv with statistics and results of test
@@ -239,24 +240,27 @@ class ExperimentRunner:
         
         for i in range(experiment.dataset_size):
             if experiment.data_type == DataType.RANGE:
-                obj = self.__generate_range2(experiment)
-                # obj = self.__generate_range(experiment)   # only does uniform dist
-                val = str(obj) if not obj.isNone else None
+                obj1 = self.__generate_range2(experiment)
+                obj2 = self.__generate_range2(experiment)
+                val = str(obj1) if not obj1.isNone else None
+                val2 = str(obj2) if not obj2.isNone else None
             elif experiment.data_type == DataType.SET:
-                obj = self.__generate_set2(experiment)
-                # obj = self.__generate_set(experiment)     # only does uniform dist
-                val = str(obj) if (obj.rset and not getattr(obj, 'isNone', False)) else None
+                obj1 = self.__generate_set2(experiment)
+                obj2 = self.__generate_set2(experiment)
+                val = str(obj1) if (obj1.rset and not getattr(obj1, 'isNone', False)) else None
+                val2 = str(obj2) if (obj2.rset and not getattr(obj2, 'isNone', False)) else None
 
             mult_obj = self.__generate_mult(experiment)
             mult = str(mult_obj)
             # row tuple looks like:     | val | mult |, val = set or individual range
-            db_formatted_rows.append((val, mult))
+            db_formatted_rows.append((val, val2, mult))
             
             # save in ddl preffered format if requested
             if experiment.save_ddl:
-                val = obj.str_ddl()
+                val = obj1.str_ddl()
+                val2 = obj1.str_ddl()
                 mult = mult_obj.str_ddl()
-                file_formatted_rows.append((val, mult))
+                file_formatted_rows.append((val, val2, mult))
                 
         return db_formatted_rows, file_formatted_rows
 
@@ -271,7 +275,7 @@ class ExperimentRunner:
             'max_time' : None,
             'sum_time' : None,
             'sumMetrics_time': None,
-            'sum_test_result' : None,
+            'sumMetrics_result' : None,
             'reduce_calls' : None,
             'max_interval_count': None,
             'total_interval_count': None,
@@ -280,6 +284,15 @@ class ExperimentRunner:
             'result_coverage': None,
             'min_interval_count': None,
             'total_min_coverage': None,
+            'prune_sumMetrics_result' : None,
+            'prune_reduce_calls' : None,
+            'prune_max_interval_count': None,
+            'prune_total_interval_count': None,
+            'prune_combine_calls': None,
+            'prune_result_size': None,
+            'prune_result_coverage': None,
+            'prune_min_interval_count': None,
+            'prune_total_min_coverage': None,
         }
         table = experiment.experiment_id
         config = self.DATA_TYPE_CONFIG[experiment.data_type]
@@ -303,12 +316,16 @@ class ExperimentRunner:
                 
                 # run shuffled aggregates
                 for key, agg, func, params in agg_jobs:
-                    results[key] = self.__run_aggregate(cur, table, agg, func, *params)
+                    if key != 'sumMetrics_time':
+                        results[key] = self.__run_aggregate(cur, table, agg, func, *params)
+                        
+                        if experiment.prune:
+                            self.__run__pruning(cur, table, agg, func, *params)
                 
                 # get additional results for sumMetrics. Run experiment and time profile once each
                 metrics = self.__get_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
                 if metrics: 
-                    results['sum_test_result'] = metrics['result']
+                    results['sumMetrics_result'] = metrics['result']
                     results['reduce_calls'] = metrics['reduce_calls']
                     results['max_interval_count'] = metrics['max_interval_count']
                     results['total_interval_count'] = metrics['total_interval_count']
@@ -317,7 +334,19 @@ class ExperimentRunner:
                     results['min_interval_count'] = metrics['min_interval_count']
                     results['total_min_coverage'] = metrics['total_min_coverage']
                     results['result_coverage'] = self.__calculate_coverage(metrics['result'])
-
+                if experiment.prune:
+                    p_metrics = self.__get_prune_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
+                    if p_metrics:
+                        results['prune_sumMetrics_result'] = p_metrics['result']
+                        results['prune_reduce_calls'] = p_metrics['reduce_calls']
+                        results['prune_max_interval_count'] = p_metrics['max_interval_count']
+                        results['prune_total_interval_count'] = p_metrics['total_interval_count']
+                        results['prune_combine_calls'] = p_metrics['combine_calls']
+                        results['prune_result_size'] = p_metrics['result_size']
+                        results['prune_min_interval_count'] = p_metrics['min_interval_count']
+                        results['prune_total_min_coverage'] = p_metrics['total_min_coverage']
+                        results['prune_result_coverage'] = self.__calculate_coverage(p_metrics['result'])
+                        
         except Exception as e:
             print(f"Error running queries for {experiment.experiment_id}: {e}")
             raise
@@ -512,13 +541,13 @@ class ExperimentRunner:
                 cur.execute(f"DROP TABLE IF EXISTS {table_name};")
 
                 if experiment.data_type == DataType.RANGE:
-                    cur.execute(f"CREATE TABLE {table_name} (id INT GENERATED ALWAYS AS IDENTITY, val int4range, mult int4range);")                
-                    template = "(%s::int4range, %s::int4range)"
+                    cur.execute(f"CREATE TABLE {table_name} (id INT GENERATED ALWAYS AS IDENTITY, val int4range, val2 int4range, mult int4range);")                
+                    template = "(%s::int4range, %s::int4range, %s::int4range)"
                 elif experiment.data_type == DataType.SET:
-                    cur.execute(f"CREATE TABLE {table_name} (id INT GENERATED ALWAYS AS IDENTITY, val int4range[], mult int4range);")
-                    template = "(%s::int4range[], %s::int4range)"
+                    cur.execute(f"CREATE TABLE {table_name} (id INT GENERATED ALWAYS AS IDENTITY, val int4range[], val2 int4range[], mult int4range);")
+                    template = "(%s::int4range[], %s::int4range[], %s::int4range)"
                 
-                sql = f"INSERT INTO {table_name} (val, mult) VALUES %s"
+                sql = f"INSERT INTO {table_name} (val, val2, mult) VALUES %s"
                 psycopg2.extras.execute_values(cur, sql, data, template)
                 conn.commit()
     
@@ -537,24 +566,89 @@ class ExperimentRunner:
         agg_time = plan["Actual Total Time"]
         
         return agg_time
-    
-    def __get_aggregate_result(self, cur, table, agg_name, combine_func, *agg_params):
-        '''get actual aggregate result value (no timing)'''
+
+    def __run__pruning(self, cur, table, agg_name, combine_func, *agg_params):
+        '''
+            runs basic
+            select  sum(val)
+            from    R
+            where   val < val2
+        '''
         
         params_sql = ",".join(str(param) for param in agg_params)
-        sql = f"""
+        sql = f"""EXPLAIN (analyze, format json)
             SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
-            FROM {table};"""
-        
+            FROM (  
+                SELECT prune_set_lt(val, val2, false) as val,
+                mult
+                -- int4range(lower(mult) * case when set_lt(a,b) is NULL then 0 else 1 end, upper(mult)) as mult
+                FROM {table}
+            ) sub;"""
         cur.execute(sql)
-        result = cur.fetchone()
+
+        # print(sql)
+        results = cur.fetchone()[0]
+        plan_root = results[0]
+        plan = plan_root["Plan"]
+        agg_time = plan["Actual Total Time"]
+    
+        return agg_time
+
+    def __get_prune_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
+        '''get sum_metrics metrics from composite type result using field accessors'''
         
+        sql = f"""
+            SELECT 
+                (result).result,
+                (result).resizeTrigger,
+                (result).sizeLimit,
+                (result).reduceCalls,
+                (result).maxIntervalCount,
+                (result).totalIntervalCount,
+                (result).combineCalls,
+                (result).minEffectiveIntervalCount,
+                (result).convergedToTotSize
+            FROM (
+                SELECT 
+                    sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
+                FROM (
+                    SELECT 
+                        prune_set_lt(val, val2, false) as val,
+                        mult
+                    FROM {table}
+                ) sub1
+            ) subq;"""
+        
+        # print(sql)
+        cur.execute(sql)
+        result = cur.fetchone()     
         if result is None:
             return None
         
-        result_value = result[0]
-        
-        return result_value
+        result_array = result[0] 
+        resize_trigger = result[1]
+        size_limit = result[2]
+        reduce_calls = result[3]
+        max_interval_count = result[4]
+        total_interval_count = result[5]
+        combine_calls = result[6]
+        min_int_count = result[7]
+        tot_min_size = result[8]
+
+        metrics = {
+            'result': result_array,             # list of NumericRange objects
+            'resize_trigger': resize_trigger,
+            'size_limit': size_limit,
+            'reduce_calls': reduce_calls,
+            'max_interval_count': max_interval_count,
+            'total_interval_count': total_interval_count,
+            'combine_calls': combine_calls,
+            'min_interval_count': min_int_count,
+            'total_min_coverage': tot_min_size,
+            'result_size': len(result_array) if result_array else 0,
+        }
+    
+        return metrics
     
     def __get_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
         '''get sum_metrics metrics from composite type result using field accessors'''
@@ -647,7 +741,7 @@ class ExperimentRunner:
         sum_times = extract('sum_time')
         sumMetrics_time = extract('sumMetrics_time')
 
-        sum_results = trial_results[0].get('sum_test_result') if trial_results else None   # actual result
+        sum_results = trial_results[0].get('sumMetrics_result') if trial_results else None   # actual result
         reduce_calls = extract('reduce_calls')
         max_intervals = extract('max_interval_count')
         total_intervals = extract('total_interval_count')
@@ -656,6 +750,16 @@ class ExperimentRunner:
         result_coverages = extract('result_coverage')
         minEffectiveIntervalCount = extract('min_interval_count')
         convergedToTotSize = extract('total_min_coverage')
+
+        p_sum_results = trial_results[0].get('prune_sumMetrics_result') if trial_results else None   # actual result
+        p_reduce_calls = extract('prune_reduce_calls')
+        p_max_intervals = extract('prune_max_interval_count')
+        p_total_intervals = extract('prune_total_interval_count')
+        p_combine_calls = extract('prune_combine_calls')
+        p_result_sizes = extract('prune_result_size')
+        p_result_coverages = extract('prune_result_coverage')
+        p_minEffectiveIntervalCount = extract('prune_min_interval_count')
+        p_convergedToTotSize = extract('prune_total_min_coverage')
 
         aggregated = {
             # experiment metadata
@@ -702,6 +806,16 @@ class ExperimentRunner:
             'minEffectiveIntervalCountMean': np.mean(minEffectiveIntervalCount) if minEffectiveIntervalCount else None,
             'convergedToTotSize': np.mean(convergedToTotSize) if convergedToTotSize else None,
             'result_coverage_mean': np.mean(result_coverages) if result_coverages else None,
+
+            'p_sum_results': p_sum_results if p_sum_results else None,
+            'p_reduce_calls_mean': np.mean(p_reduce_calls) if p_reduce_calls else None,
+            'p_max_interval_count_mean': np.mean(p_max_intervals) if p_max_intervals else None,
+            'p_total_interval_count_mean': np.mean(p_total_intervals) if p_total_intervals else None,
+            'p_combine_calls_mean': np.mean(p_combine_calls) if p_combine_calls else None,
+            'p_result_size_mean': np.mean(p_result_sizes) if p_result_sizes else None,
+            'p_minEffectiveIntervalCountMean': np.mean(p_minEffectiveIntervalCount) if p_minEffectiveIntervalCount else None,
+            'p_convergedToTotSize': np.mean(p_convergedToTotSize) if p_convergedToTotSize else None,
+            'p_result_coverage_mean': np.mean(p_result_coverages) if p_result_coverages else None,
         }
         
         return aggregated
