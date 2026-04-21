@@ -291,7 +291,6 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     PG_RETURN_ARRAYTYPE_P(output);                                      \
 }
 
-
 #define DEFINE_PRUNE_SET_FUNC_COMPARISON(func_name, internal_func)         \
 Datum func_name(PG_FUNCTION_ARGS)                                       \
 {                                                                       \
@@ -330,14 +329,14 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
 /*Function declarations*/
 RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
 ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
+ArrayType* helperFunctions_helper( ArrayType *input, Int4RangeSet (*callback)() );
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
 int logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4RangeSet, Int4RangeSet) );
-ArrayType* helperFunctions_helper( ArrayType *input, Int4RangeSet (*callback)() );
 
 // for min/max agg
 // can all be added to helperFunctions.h
-Int4Range range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement);
-Int4RangeSet set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement);
+// Int4Range range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement);
+// Int4RangeSet set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement);
 Int4Range range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement);
 Int4RangeSet set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement);
 
@@ -369,7 +368,6 @@ DEFINE_SET_LOGICAL_FUNC(set_lt, set_less_than)
 DEFINE_SET_LOGICAL_FUNC(set_lte, set_less_than_equal)
 DEFINE_SET_LOGICAL_FUNC(set_eq, set_equal_internal)
 
-
 /////////////////////
  // Prune Functions
 /////////////////////
@@ -388,7 +386,6 @@ DEFINE_PRUNE_SET_FUNC_COMPARISON(prune_set_gte, prune_gte_set_internal)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_eq, prune_eq_set_internal)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_and, prune_AND_internal_set)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
-
 
 /////////////////////
  // Helper Functions
@@ -540,10 +537,11 @@ lift_range(PG_FUNCTION_ARGS)
 }
 
 
-// FIXME- fix the local code for this. need to account for NULL. should be simple fix
-// also figure out of can make a single helperFunction_helper that takes in optinal parameters
+// Reduce to num_ranges specified in PG_ARG(1).
 Datum
 set_reduce_size(PG_FUNCTION_ARGS)
+// FIXME- fix the local code for this. need to account for NULL. should be simple fix
+// also figure out of can make a single helperFunction_helper that takes in optinal parameters
 {
     ArrayType *inputArray;
     int32 numRangesKeep;
@@ -558,31 +556,20 @@ set_reduce_size(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
+    // get args and typcache
     inputArray = PG_GETARG_ARRAYTYPE_P(0);
     numRangesKeep = PG_GETARG_INT32(1);
-
-    // assign typcache based on RangeType input
     rangeTypeOID = ARR_ELEMTYPE(inputArray);
     typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);
 
-    set1 = deserialize_ArrayType(inputArray, typcache);
-    
-    // return NULL sorted range == NULL. 
+    set1 = deserialize_ArrayType(inputArray, typcache);    
+    // return NULL if sorted range == NULL. 
     if (set1.count == 0){
         PG_RETURN_NULL();
     }
 
     // reduce the set to numRangesKeep
     result = reduceSize(set1, numRangesKeep);
-
-    // removed this because we just ignore if they want to reduce larger than whats possible
-    // // the reduced size should always be less than equal to numRangesKeep
-    // if (result.count < numRangesKeep) {
-    //     ereport(ERROR,
-    //         (errcode(ERRCODE_DATA_CORRUPTED),
-    //         errmsg("result.count < numRangesKeep when reducing. Impossible result")));
-    // }
-
     output = serialize_ArrayType(result, typcache);
     
     pfree(set1.ranges);
@@ -591,6 +578,7 @@ set_reduce_size(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(output);
 }
 
+// quicksort by LB and tie break on UB. Appends null if necessary
 Datum
 set_sort(PG_FUNCTION_ARGS)
 {
@@ -608,6 +596,7 @@ set_sort(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(output);
 }
 
+// greedily merges and removed any overlap. Returns most effecient lossless representation 
 Datum
 set_normalize(PG_FUNCTION_ARGS)
 {
@@ -628,6 +617,8 @@ set_normalize(PG_FUNCTION_ARGS)
 /*
 Takes in 2 parameters: Array: Int4RangeSet, and the function ptr callback: Int4RangeSet function() 
 Generally called for helper functions that modify 1 Int4RangeSet param passed in
+
+* Callback must palloc its own data
 */
 ArrayType*
 helperFunctions_helper(ArrayType *input, Int4RangeSet (*callback)(Int4RangeSet) )
@@ -841,61 +832,65 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
 /*
 // Ignoring multLB=0, returns original Set x Every int in Mult. 
 // naturalElement Set does not affect min/max calculation
+
+// DEPRECATED. not used bc this did nothing but filter 0 mult
 */
 // FIXME will need to change the type of neutral element depending on what datatype the user is using
-Int4Range
-range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement)
-{
-    // return neutral so doesn't affect the aggregate
-    if(mult.lower == 0) {
-        Int4Range result;
-        result.isNull = false;
+// Int4Range
+// range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement)
+// {
+//     // return neutral so doesn't affect the aggregate
+//     if(mult.lower == 0) {
+//         Int4Range result;
+//         result.isNull = false;
     
-        // have to adjust UB + 2 or LB -2 based on if pos or neg
-        if (neutralElement <= 0) {
-            result.lower = 0;      //temp change to resolve crashing   
-            result.upper = 1 ;
-        }
-        else {
-            result.lower = neutralElement;      //temp change to resolve crashing   
-            result.upper = neutralElement + 1;
-        }
-        return result;
-    }
+//         // have to adjust UB + 2 or LB -2 based on if pos or neg
+//         if (neutralElement <= 0) {
+//             result.lower = 0;      //temp change to resolve crashing   
+//             result.upper = 1 ;
+//         }
+//         else {
+//             result.lower = neutralElement;      //temp change to resolve crashing   
+//             result.upper = neutralElement + 1;
+//         }
+//         return result;
+//     }
 
-    return set1;
-}
+//     return set1;
+// }
 
 /*
 // Returns naturalElement Set if multiplicity is 0, otherwise original Set. 
 // naturalElement Set does not affect min/max calculation
+
+// DEPRECATED. not used bc this did nothing but filter 0 mult
 */
 // FIXME will need to change the type of neutral element depending on what datatype the user is using
-Int4RangeSet
-set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement)
-{
-    // return neutral so doesn't affect the aggregate
-    if(mult.lower == 0) {
-        Int4RangeSet result;
-        result.count = 1;
-        result.containsNull = false;
-        result.ranges = palloc(sizeof(Int4Range));
-        result.ranges[0].isNull = false;
+// Int4RangeSet
+// set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement)
+// {
+//     // return neutral so doesn't affect the aggregate
+//     if(mult.lower == 0) {
+//         Int4RangeSet result;
+//         result.count = 1;
+//         result.containsNull = false;
+//         result.ranges = palloc(sizeof(Int4Range));
+//         result.ranges[0].isNull = false;
     
-        // have to adjust UB + 2 or LB -2 based on if pos or neg
-        if (neutralElement <= 0) {
-            result.ranges[0].lower = 0;      //temp change to resolve crashing   
-            result.ranges[0].upper = 1;
-        }
-        else {
-            result.ranges[0].lower = neutralElement;      //temp change to resolve crashing   
-            result.ranges[0].upper = neutralElement + 1;
-        }
-        return result;
-    }
+//         // have to adjust UB + 2 or LB -2 based on if pos or neg
+//         if (neutralElement <= 0) {
+//             result.ranges[0].lower = 0;      //temp change to resolve crashing   
+//             result.ranges[0].upper = 1;
+//         }
+//         else {
+//             result.ranges[0].lower = neutralElement;      //temp change to resolve crashing   
+//             result.ranges[0].upper = neutralElement + 1;
+//         }
+//         return result;
+//     }
 
-    return set1;
-}
+//     return set1;
+// }
 
 /*
 // To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
@@ -1700,6 +1695,7 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
     rAvgAggState *state;
     RangeType *data, *mult;
     Int4Range curr, m, combSum;
+    // Int4RangeSet lifted_curr;
     TypeCacheEntry *typcache;
 
     if (!AggCheckCallContext(fcinfo, &aggcontext)) {
@@ -1721,7 +1717,10 @@ agg_avg_range_transfunc(PG_FUNCTION_ARGS)
     typcache = lookup_type_cache(data->rangetypid, TYPECACHE_RANGE_INFO);
     curr = deserialize_RangeType(data, typcache);
     m = deserialize_RangeType(mult, typcache);
-    combSum = range_mult_combine_helper_sum(curr, m, 0);
+
+    // lifted_curr = lift_range_local(curr);
+    // combSum = range_mult_combine_helper_sum(curr, m, 0);
+    combSum = range_mult_combine_helper(curr, m, 0);    // not sure why i have previous version??
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){    
@@ -1803,7 +1802,8 @@ agg_avg_set_transfunc(PG_FUNCTION_ARGS)
     typcacheMult = lookup_type_cache(mult->rangetypid, TYPECACHE_RANGE_INFO);
     curr = deserialize_ArrayType(data, typcacheSet);
     m = deserialize_RangeType(mult, typcacheMult);
-    combSum = set_mult_combine_helper_sum(curr, m, 0);
+    // combSum = set_mult_combine_helper_sum(curr, m, 0);
+    combSum = set_mult_combine_helper(curr, m, 0);      // also not sure why i have other helper
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){    
