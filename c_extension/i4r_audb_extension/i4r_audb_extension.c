@@ -808,7 +808,7 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
 // /////////////////////
 
 /*
-// Returns naturalElement Set if multiplicity is 0, otherwise original Set. 
+// Ignoring multLB=0, returns original Set x Every int in Mult. 
 // naturalElement Set does not affect min/max calculation
 */
 // FIXME will need to change the type of neutral element depending on what datatype the user is using

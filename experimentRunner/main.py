@@ -88,6 +88,8 @@ class ExperimentSettings:
     gap_seq_formula_str: str = None # exact formula of gap_size_sequence
     
     prune: bool = False
+    prune_alpha : int = 0
+    
     mode: str = None                # NOT USED YET what modes of test suite to execute
     save_ddl:bool = False           # store ddl code to make tables 
     save_csv: bool = True           # store csv with statistics and results of test
@@ -127,7 +129,8 @@ class ExperimentSettings:
             'num_intervals': self.num_intervals,
             'gap_size': self.gap_size,
             'num_intervals_range': self.num_intervals_range,
-            'gap_size_range': self.gap_size_range
+            'gap_size_range': self.gap_size_range,
+            'prune' : self.prune,
         }
     
 class ExperimentRunner:
@@ -197,38 +200,6 @@ class ExperimentRunner:
         aggregated_results = self.__calc_aggregate_results(experiment, experiment_results)
         self.results.append(aggregated_results)
         return experiment_results
-    
-    # def run_experiment(self, experiment: ExperimentSettings) -> list:
-    #     ''' creates or reuses generated data. runs experiment for each trial '''
-
-    #     experiment_results = []
-
-    #     # Set seed once for the whole experiment
-    #     self.trial_seed = (self.master_seed + experiment.curr_trial) % (2**32)
-    #     np.random.seed(self.trial_seed)
-
-    #     # Set experiment_id BEFORE generating/inserting data
-    #     experiment.curr_trial = 1
-    #     experiment.experiment_id = self.__generate_name(experiment)
-
-    #     # Generate data once and insert under the fixed experiment_id
-    #     db_data_format, file_data_format = self.generate_data(experiment)
-    #     if experiment.save_ddl:
-    #         self.__save_ddl_file(experiment, file_data_format)
-    #     self.__insert_data_db(experiment, db_data_format)
-
-    #     for trial in range(experiment.num_trials):
-    #         experiment.curr_trial = trial + 1
-    #         print(f' trial:{experiment.curr_trial}')
-    #         # experiment_id stays the same every trial — same table, same data
-    #         # experiment.experiment_id = self.__generate_name(experiment)
-
-    #         trial_results = self.run_queries(experiment)
-    #         experiment_results.append(trial_results)
-
-    #     aggregated_results = self.__calc_aggregate_results(experiment, experiment_results)
-    #     self.results.append(aggregated_results)
-    #     return experiment_results
             
     def generate_data(self, experiment :ExperimentSettings):
         '''
@@ -275,6 +246,11 @@ class ExperimentRunner:
             'max_time' : None,
             'sum_time' : None,
             'sumMetrics_time': None,
+            'prune_min_time' : None,
+            'prune_max_time' : None,
+            'prune_sum_time' : None,
+            'prune_sumMetrics_time': None,
+            
             'sumMetrics_result' : None,
             'reduce_calls' : None,
             'max_interval_count': None,
@@ -284,6 +260,7 @@ class ExperimentRunner:
             'result_coverage': None,
             'min_interval_count': None,
             'total_min_coverage': None,
+            
             'prune_sumMetrics_result' : None,
             'prune_reduce_calls' : None,
             'prune_max_interval_count': None,
@@ -317,10 +294,11 @@ class ExperimentRunner:
                 # run shuffled aggregates
                 for key, agg, func, params in agg_jobs:
                     if key != 'sumMetrics_time':
-                        results[key] = self.__run_aggregate(cur, table, agg, func, *params)
-                        
                         if experiment.prune:
-                            self.__run__pruning(cur, table, agg, func, *params)
+                            results[key] = self.__run_aggregate_cond(cur, table, agg, func, "set_lt(val, val2) is not false", *params)
+                            results[f'prune_{key}'] = self.__run__pruning(cur, table, agg, func, experiment.prune_alpha, *params)
+                        else:
+                            results[key] = self.__run_aggregate(cur, table, agg, func, *params)
                 
                 # get additional results for sumMetrics. Run experiment and time profile once each
                 metrics = self.__get_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
@@ -335,7 +313,7 @@ class ExperimentRunner:
                     results['total_min_coverage'] = metrics['total_min_coverage']
                     results['result_coverage'] = self.__calculate_coverage(metrics['result'])
                 if experiment.prune:
-                    p_metrics = self.__get_prune_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], not self.NORMALIZE)
+                    p_metrics = self.__get_prune_sum_metrics(cur, table, config['combine_sum'], experiment.reduce_triggerSz_sizeLim[0], experiment.reduce_triggerSz_sizeLim[1], experiment.prune_alpha, not self.NORMALIZE)
                     if p_metrics:
                         results['prune_sumMetrics_result'] = p_metrics['result']
                         results['prune_reduce_calls'] = p_metrics['reduce_calls']
@@ -551,6 +529,32 @@ class ExperimentRunner:
                 psycopg2.extras.execute_values(cur, sql, data, template)
                 conn.commit()
     
+    ####### PRUNE #######
+    def build_transform(table, transform_func=None, prune_alpha=None):
+        """
+        Returns SQL subquery for FROM clause
+        """
+
+        if transform_func is None:
+            return table
+
+        if prune_alpha is None:
+            return f"""
+                SELECT
+                    {transform_func}(val, val2, false) as val,
+                    mult
+                FROM {table}
+            """
+
+        # if alpha-based transform exists
+        return f"""
+            SELECT
+                {transform_func}(val, set_divide(val2, array[lift_scalar({prune_alpha})]), false) as val,
+                mult
+            FROM {table}
+        """
+
+
     def __run_aggregate(self, cur, table, agg_name, combine_func, *agg_params):
         '''General aggregate runner with no WHERE clause'''
 
@@ -558,8 +562,28 @@ class ExperimentRunner:
         sql = f"""EXPLAIN (analyze, format json)
             SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
             FROM {table};"""
+        
+        # print(sql)
         cur.execute(sql)
+        results = cur.fetchone()[0]
+        plan_root = results[0]
+        plan = plan_root["Plan"]
+        agg_time = plan["Actual Total Time"]
+        
+        return agg_time
+    
+    def __run_aggregate_cond(self, cur, table, agg_name, combine_func, cond, *agg_params):
+        '''General aggregate runner with WHERE clause'''
 
+        params_sql = ",".join(str(param) for param in agg_params)
+        sql = f"""
+            EXPLAIN (analyze, format json)
+            SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
+            FROM {table}
+            WHERE {cond};"""
+        
+        print(sql)
+        cur.execute(sql)
         results = cur.fetchone()[0]
         plan_root = results[0]
         plan = plan_root["Plan"]
@@ -567,7 +591,8 @@ class ExperimentRunner:
         
         return agg_time
 
-    def __run__pruning(self, cur, table, agg_name, combine_func, *agg_params):
+    # add in prune_alpha for
+    def __run__pruning(self, cur, table, agg_name, combine_func, prune_alpha, *agg_params):
         '''
             runs basic
             select  sum(val)
@@ -578,9 +603,12 @@ class ExperimentRunner:
         params_sql = ",".join(str(param) for param in agg_params)
         sql = f"""EXPLAIN (analyze, format json)
             SELECT {agg_name} ({combine_func}(val, mult) {',' if params_sql else ''}{params_sql})
-            FROM (  
-                SELECT prune_set_lt(val, val2, false) as val,
-                mult
+            FROM (          
+                SELECT 
+                    prune_set_lt(val, val2, false) as val,
+                    mult
+                
+                -- prune_set_lt(val, set_divide(val2, array[lift_scalar({prune_alpha})]), false) as val,
                 -- int4range(lower(mult) * case when set_lt(a,b) is NULL then 0 else 1 end, upper(mult)) as mult
                 FROM {table}
             ) sub;"""
@@ -593,10 +621,27 @@ class ExperimentRunner:
         agg_time = plan["Actual Total Time"]
     
         return agg_time
-
-    def __get_prune_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
+    
+    def __get_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
         '''get sum_metrics metrics from composite type result using field accessors'''
         
+        # sql = f"""
+        #     SELECT 
+        #         (result).result,
+        #         (result).resizeTrigger,
+        #         (result).sizeLimit,
+        #         (result).reduceCalls,
+        #         (result).maxIntervalCount,
+        #         (result).totalIntervalCount,
+        #         (result).combineCalls,
+        #         (result).minEffectiveIntervalCount,
+        #         (result).convergedToTotSize
+        #     FROM (
+        #         (SELECT sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
+        #         FROM {table})
+        #     ) subq;"""
+
+        # prune 
         sql = f"""
             SELECT 
                 (result).result,
@@ -611,16 +656,12 @@ class ExperimentRunner:
             FROM (
                 SELECT 
                     sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
-                FROM (
-                    SELECT 
-                        prune_set_lt(val, val2, false) as val,
-                        mult
-                    FROM {table}
-                ) sub1
+                FROM {table}
+                WHERE set_lt(val, val2) is not false
             ) subq;"""
         
-        # print(sql)
         cur.execute(sql)
+        print(sql)
         result = cur.fetchone()     
         if result is None:
             return None
@@ -650,7 +691,8 @@ class ExperimentRunner:
     
         return metrics
     
-    def __get_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, normalize: bool):
+
+    def __get_prune_sum_metrics(self, cur, table, combine_func, trigger_sz, size_lim, prune_alpha, normalize: bool):
         '''get sum_metrics metrics from composite type result using field accessors'''
         
         sql = f"""
@@ -665,10 +707,20 @@ class ExperimentRunner:
                 (result).minEffectiveIntervalCount,
                 (result).convergedToTotSize
             FROM (
-                (SELECT sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
-                FROM {table})) subq;"""
+                SELECT 
+                    sum_metrics({combine_func}(val, mult), {trigger_sz}, {size_lim}, {normalize}) as result
+                FROM (
+                    SELECT 
+                        prune_set_lt(val, val2, false) as val,
+                        mult
+                        -- prune_set_lt(val, set_divide(val2, array[lift_scalar({prune_alpha})]), false) as val,
+                        -- prune_set_lt(val, val2, false) as val,
+                    FROM {table}
+                ) sub1
+            ) subq;"""
         
         cur.execute(sql)
+        print(sql)
         result = cur.fetchone()     
         if result is None:
             return None
@@ -741,6 +793,11 @@ class ExperimentRunner:
         sum_times = extract('sum_time')
         sumMetrics_time = extract('sumMetrics_time')
 
+        p_min_times = extract('prune_min_time')
+        p_max_times = extract('prune_max_time')
+        p_sum_times = extract('prune_sum_time')
+        p_sumMetrics_time = extract('prune_sumMetrics_time')
+
         sum_results = trial_results[0].get('sumMetrics_result') if trial_results else None   # actual result
         reduce_calls = extract('reduce_calls')
         max_intervals = extract('max_interval_count')
@@ -781,6 +838,8 @@ class ExperimentRunner:
             'reduce_triggerSz_sizeLim': experiment.reduce_triggerSz_sizeLim,
             'independent_variable': experiment.independent_variable,
             'distribution': dist.distribution,
+            'prune' : experiment.prune,
+            'prune_alpha' : experiment.prune_alpha,
             **distribution_fields,
             
             'row_count': np.mean(row_count) if row_count else None,
@@ -795,6 +854,18 @@ class ExperimentRunner:
             'sum_time_std': np.std(sum_times) if sum_times else None,
             'sumMetrics_time_mean': np.mean(sumMetrics_time) if sumMetrics_time else None,
             'sumMetrics_time_std': np.std(sumMetrics_time) if sumMetrics_time else None,
+
+            # Prune MIN stats
+            'p_min_time_mean': np.mean(p_min_times) if p_min_times else None,
+            'p_min_time_std': np.std(p_min_times) if p_min_times else None,    
+            # MAX stats
+            'p_max_time_mean': np.mean(p_max_times) if p_max_times else None,
+            'p_max_time_std': np.std(p_max_times) if p_max_times else None,
+            # Prune SUM stats 
+            'p_sum_time_mean': np.mean(p_sum_times) if p_sum_times else None,
+            'p_sum_time_std': np.std(p_sum_times) if p_sum_times else None,
+            'p_sumMetrics_time_mean': np.mean(p_sumMetrics_time) if p_sumMetrics_time else None,
+            'p_sumMetrics_time_std': np.std(p_sumMetrics_time) if p_sumMetrics_time else None,
             
             # reduction stats
             'sum_results': sum_results if sum_results else None,
@@ -915,9 +986,12 @@ def format_name(experiment: ExperimentSettings):
     if iv and iv_val is not None:
         iv = f"iv_{experiment.iv_map[iv]}{iv_val}"
     
+        
     seed = f"s{getattr(experiment, 'seed', '')}" if getattr(experiment, 'seed', None) else ""
+    pa = "pa_" + str(experiment.prune_alpha) if experiment.prune else ""
+
     
-    name = f"{dtype}_{sz}_{red}_{iv}{seed}"
+    name = f"{dtype}_{sz}_{red}_{iv}_{pa}{seed}"
     return name
 
 def make_log_sweep(n_min, n_max, points):
@@ -967,7 +1041,7 @@ def run_all():
         print(f"\n    Suite results: {suite_results}")
 
         # plot aggregate results for suite
-        _plot_experiment_suite(runner, suite_results)
+        # _plot_experiment_suite(runner, suite_results)
 
     ### Clean after
     if args.clean_after:

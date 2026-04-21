@@ -43,7 +43,7 @@ PostgreSQL extension for range-based uncertainty arithmetic and aggregates. Part
    CREATE EXTENSION i4r_audb_extension;
 ```
 ### Option 2: Local Installation
-
+0. Ensure dependencies are installed and proper version is used.
 1. Clone the repository:
 ```sh
    git clone <repository_url>
@@ -112,13 +112,19 @@ SELECT sum(combine_range_mult_sum(amount, multiplicity)) FROM sales;
 * set_lt, set_lte, set_gt, set_gte, set_eq
 
 ### Aggregates
+- MIN, MAX, COUNT, AVG, SUM for ranges and sets
 - `min(combine_set_mult_min(int4range[], int4range)) → int4range[]`
 - `max(combine_set_mult_max(int4range[], int4range)) → int4range[]`
 - `sum(combine_range_mult_sum(int4range, int4range)) → int4range`
-<!-- - `count(combine_range_mult_sum(int4range, int4range)) → int4range` -->
+- `count(combine_range_mult_sum(int4range, int4range)) → int4range`
 
 ### Helper Functions
-set_normalize, set_sort, set_reduce_size, lift
+set_normalize, set_sort, set_reduce_size, lift, array_length, range_coverage, set_coverage
+
+### Pruning Operators
+* prune_range_lt, prune_range_lte, prune_range_gt, prune_range_gte, prune_range_and, prune_range_or, prune_range_eq
+* prune_set_lt, prune_set_lte, prune_set_gt, prune_set_gte, prune_set_and, prune_set_or, prune_set_eq
+
 
 TODO add function declarations
 <!-- 
@@ -162,7 +168,7 @@ psql -U postgres -d audb_test
 ```
 
 ### Run Specific Tests
-TODO
+- [Python Experiment Runner Suite](https://github.com/asxvi/audb/tree/main/experimentRunner)
 
 
 ## License
