@@ -70,7 +70,7 @@ PG_FUNCTION_INFO_V1(prune_set_or);
 /*(Aggregate Functions)*/
 //          sum
 PG_FUNCTION_INFO_V1(combine_range_mult_sum);
-PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);
+PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);       // not used anymore bc combine_range_mult_sum returns i4r[]
 
 PG_FUNCTION_INFO_V1(combine_set_mult_sum);
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc);
@@ -78,8 +78,6 @@ PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc);
 
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc_metrics);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc_metrics);
-// PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTestNN);
-
 
 //          min/max
 PG_FUNCTION_INFO_V1(combine_range_mult_min);
@@ -89,6 +87,7 @@ PG_FUNCTION_INFO_V1(agg_max_range_transfunc);
 
 PG_FUNCTION_INFO_V1(combine_set_mult_min);
 PG_FUNCTION_INFO_V1(combine_set_mult_max);
+
 PG_FUNCTION_INFO_V1(agg_min_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_max_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_min_max_set_finalfunc);
@@ -894,9 +893,8 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
 
 /*
 // To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
 // Parameter: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to SUM()
+// Returns: Combined I4R x Mult result ArrayType Datum as argument to SUM()
 */
 Datum
 combine_range_mult_sum(PG_FUNCTION_ARGS) 
@@ -961,7 +959,7 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     Int4RangeSet set1;
     Int4RangeSet result;
     
-    int neutral_element;
+    // int neutral_element;
     TypeCacheEntry *typcacheSet;
     TypeCacheEntry *typcacheMult;
     
@@ -982,27 +980,23 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    // hardcoded //FIXME
-    neutral_element = 0;
-
     // deserialize, operate on, serialize, return
     set1 = deserialize_ArrayType(set_input, typcacheSet);
     mult = deserialize_RangeType(mult_input, typcacheMult);
 
-    // check for mult LB = 0
-    if (mult.lower == 0){
-        pfree(set1.ranges);
-        PG_RETURN_NULL();
-    }
+    // // check for mult LB = 0
+    // if (mult.lower == 0){
+    //     pfree(set1.ranges);
+    //     PG_RETURN_NULL();
+    // }
 
-    result = set_mult_combine_helper(set1, mult, neutral_element);
+    // output is normalized before returned
+    result = interval_agg_combine_set_mult(set1, mult);
     output = serialize_ArrayType(result, typcacheSet);
     
     // clean
     pfree(set1.ranges);
-    if (result.ranges != set1.ranges) {
-        pfree(result.ranges);
-    }
+    pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
@@ -1186,7 +1180,6 @@ agg_sum_range_transfunc(PG_FUNCTION_ARGS)
 
     PG_RETURN_ARRAYTYPE_P(result);
 }
-
 
 /*
 State Transition function for max aggregate

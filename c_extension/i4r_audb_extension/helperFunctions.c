@@ -525,7 +525,8 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     // bool appendNULL = false;
 
     if (set1.count == 0)
-      return set1;
+      return empty_set();  
+      // return set1; 
 
     if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull)
       return empty_set();
@@ -539,6 +540,7 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     idx = 0;
     // traverse thru every set/mult combination and union result
     for (i = mult.lower; i < mult.upper; i++) {
+      
       // ignore mult == 0 bc it produced NULL flag
       if (i == 0) {
         // appendNULL = true;  
@@ -557,8 +559,8 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
 
       // union in new results
       for (j = 0; j < tempResult.count; j++) {
-          result.ranges[idx] = tempResult.ranges[j];
-          idx++;
+        result.ranges[idx] = tempResult.ranges[j];
+        idx++;
       }
 
       pfree(tempResult.ranges);

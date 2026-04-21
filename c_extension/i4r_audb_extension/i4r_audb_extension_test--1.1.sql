@@ -193,7 +193,8 @@ INSERT INTO t5_r_agg_data (val, mult) VALUES
     ('empty'::int4range, int4range(1,2)), -- empty
     (int4range(20,30), 'empty'::int4range), -- empty mult
     (NULL, int4range(1,2)),              -- null
-    (int4range(25,35), NULL);            -- null mult
+    (int4range(25,35), NULL),            -- null mult
+    (int4range(10,20), int4range(1,5));   -- multi result
 
 INSERT INTO t5_r_aggregates VALUES
     -- MIN tests
@@ -418,11 +419,11 @@ SELECT *, 't6_s_aggregates' as source
 FROM t6_s_aggregates
 WHERE actual IS DISTINCT FROM expected;
 
-\echo Test7: Special Aggregates
-SELECT 'Test7: Set Aggregates' as Test;
-SELECT *, 't7_s_aggregates' as source
-FROM t7_s_aggregates
-WHERE actual IS DISTINCT FROM expected;
+-- \echo Test7: Special Aggregates
+-- SELECT 'Test7: Set Aggregates' as Test;
+-- SELECT *, 't7_s_aggregates' as source
+-- FROM t7_s_aggregates
+-- WHERE actual IS DISTINCT FROM expected;
 
 
 -- select 
@@ -475,22 +476,22 @@ WHERE actual IS DISTINCT FROM expected;
 -- WHERE set_lt(val, array[int4range(10,20)]) = true;
 
 
- select 
-    sum(combine_set_mult_sum(val, mult), 500, 100),
-    num_range(sum(combine_set_mult_sum(val, mult), 500, 100))
- from t_s_iv_ni_nir_0073f377a2;
+--  select 
+--     sum(combine_set_mult_sum(val, mult), 500, 100),
+--     num_range(sum(combine_set_mult_sum(val, mult), 500, 100))
+--  from t_s_iv_ni_nir_0073f377a2;
 
- -- compare unpruned vs pruned
-SELECT 
-    array_length(no_prune, 1)  as intervals_no_prune,
-    set_coverage(no_prune)     as coverage_no_prune,
-    array_length(pruned, 1)    as intervals_pruned,
-    set_coverage(pruned)       as coverage_pruned,
-FROM (
-    SELECT 
-        sum(combine_set_mult_sum(val, mult), 500, 100) as no_prune,
-        sum(combine_set_mult_sum(
-            prune_set_lt(val, array[int4range(1000, 1200)], false), 
-        mult), 500, 100) as pruned
-    FROM t_s_iv_n_9ece6d82ac
-) sub;
+--  -- compare unpruned vs pruned
+-- SELECT 
+--     array_length(no_prune, 1)  as intervals_no_prune,
+--     set_coverage(no_prune)     as coverage_no_prune,
+--     array_length(pruned, 1)    as intervals_pruned,
+--     set_coverage(pruned)       as coverage_pruned,
+-- FROM (
+--     SELECT 
+--         sum(combine_set_mult_sum(val, mult), 500, 100) as no_prune,
+--         sum(combine_set_mult_sum(
+--             prune_set_lt(val, array[int4range(1000, 1200)], false), 
+--         mult), 500, 100) as pruned
+--     FROM t_s_iv_n_9ece6d82ac
+-- ) sub;

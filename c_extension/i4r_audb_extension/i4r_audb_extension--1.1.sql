@@ -173,7 +173,7 @@ LANGUAGE c;
 ---------- SUM -----------
 
 CREATE FUNCTION combine_range_mult_sum(range int4range, mult int4range) 
-RETURNS int4range
+RETURNS int4range[]
 AS 'MODULE_PATHNAME', 'combine_range_mult_sum'
 LANGUAGE c;
 
@@ -182,6 +182,7 @@ RETURNS int4range
 AS 'MODULE_PATHNAME', 'agg_sum_range_transfunc'
 LANGUAGE c;
 
+-- not used anymore because combine_range_mult_sum returns int4range[]. thus it makes more sense to use i4r[] sum()
 create aggregate sum (int4range)
 (
     stype = int4range,
