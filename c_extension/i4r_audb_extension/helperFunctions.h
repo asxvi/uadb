@@ -107,7 +107,7 @@ bool overlap(Int4Range a, Int4Range b);
 bool contains(Int4Range a, Int4Range b);
 int range_distance(Int4Range a, Int4Range b);
 Int4Range lift_scalar_local(int x);
-Int4RangeSet lift_range(Int4Range a);
+Int4RangeSet lift_range_local(Int4Range a);
 Int4RangeSet sort(Int4RangeSet vals);
 Int4RangeSet normalize(Int4RangeSet vals);
 Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep);

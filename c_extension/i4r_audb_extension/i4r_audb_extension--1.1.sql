@@ -142,11 +142,11 @@ RETURNS int4range
 AS 'MODULE_PATHNAME', 'lift_scalar'
 LANGUAGE c;
 
--- -- lift takes 1 int4range and returns its equivallent Int4RangeSet: int4range[] 
--- CREATE FUNCTION lift_range(a int4range)
--- RETURNS int4range[]
--- AS 'MODULE_PATHNAME', 'lift_range'
--- LANGUAGE c;
+-- lift takes 1 int4range and returns its equivallent Int4RangeSet: int4range[] 
+CREATE FUNCTION lift_range(a int4range)
+RETURNS int4range[]
+AS 'MODULE_PATHNAME', 'lift_range'
+LANGUAGE c;
 
 -- set_reduce_size takes 1 array of int4range, and an integer and returns reduced size array of int4range
 CREATE FUNCTION set_reduce_size(a int4range[], numRangesKeep integer)

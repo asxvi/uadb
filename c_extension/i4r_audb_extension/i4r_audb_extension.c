@@ -45,6 +45,7 @@ PG_FUNCTION_INFO_V1(array_length);
 PG_FUNCTION_INFO_V1(range_coverage);
 PG_FUNCTION_INFO_V1(set_coverage);
 PG_FUNCTION_INFO_V1(lift_scalar);
+PG_FUNCTION_INFO_V1(lift_range);
 PG_FUNCTION_INFO_V1(set_sort);
 PG_FUNCTION_INFO_V1(set_normalize);
 PG_FUNCTION_INFO_V1(set_reduce_size);
@@ -70,9 +71,11 @@ PG_FUNCTION_INFO_V1(prune_set_or);
 //          sum
 PG_FUNCTION_INFO_V1(combine_range_mult_sum);
 PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);
+
 PG_FUNCTION_INFO_V1(combine_set_mult_sum);
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc);
+
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc_metrics);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc_metrics);
 // PG_FUNCTION_INFO_V1(agg_sum_set_transfuncTestNN);
@@ -83,6 +86,7 @@ PG_FUNCTION_INFO_V1(combine_range_mult_min);
 PG_FUNCTION_INFO_V1(combine_range_mult_max);
 PG_FUNCTION_INFO_V1(agg_min_range_transfunc);
 PG_FUNCTION_INFO_V1(agg_max_range_transfunc);
+
 PG_FUNCTION_INFO_V1(combine_set_mult_min);
 PG_FUNCTION_INFO_V1(combine_set_mult_max);
 PG_FUNCTION_INFO_V1(agg_min_set_transfunc);
@@ -391,7 +395,7 @@ DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
 /////////////////////
 
 // find total num ranges in set
-Datum
+Datum 
 array_length(PG_FUNCTION_ARGS)
 {
     ArrayType *input;
@@ -420,7 +424,7 @@ array_length(PG_FUNCTION_ARGS)
 
 }
 
-// find total volume of interval
+// sum of volume of interval
 Datum
 range_coverage(PG_FUNCTION_ARGS)
 {
@@ -441,7 +445,7 @@ range_coverage(PG_FUNCTION_ARGS)
     PG_RETURN_INT64((int64)(r.upper - r.lower));
 }
 
-// find total volume of every inteval in set
+// sum of volume of every interval in set
 Datum
 set_coverage(PG_FUNCTION_ARGS)
 {
@@ -477,14 +481,13 @@ set_coverage(PG_FUNCTION_ARGS)
     PG_RETURN_INT64(total);
 }
 
-/* lift expects 1 parameter x for example and returns a valid int4range [x, x+1) */
-// Lift an Integer x into a RangeType [x, x+1)
+// x -> [x,x+1)
 Datum
 lift_scalar(PG_FUNCTION_ARGS)
 {
     Oid rangeTypeOID;
     TypeCacheEntry *typcache;
-    int unlifted;
+    int x;
     Int4Range result;
     RangeBound lb, ub;
     RangeType *output;
@@ -493,21 +496,49 @@ lift_scalar(PG_FUNCTION_ARGS)
     if (PG_ARGISNULL(0)){
         PG_RETURN_NULL();
     }
-
+    
+    x = PG_GETARG_INT32(0);
+    result = lift_scalar_local(x);
+    
     rangeTypeOID = TypenameGetTypid(PRIMARY_DATA_TYPE);
     typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);
     
-    unlifted = PG_GETARG_INT32(0);
-    
-    result = lift_scalar_local(unlifted);
-    
     lb = make_range_bound(result.lower, true, true);
     ub = make_range_bound(result.upper, false, false);
-        
     output = make_range(typcache, &lb, &ub, false, NULL);
 
     PG_RETURN_RANGE_P(output);
 }
+
+
+// [a,b) -> { [a,b) }
+Datum
+lift_range(PG_FUNCTION_ARGS)
+{
+    Oid rangeTypeOID;
+    TypeCacheEntry *typcache;
+    RangeType* input;
+    Int4Range unlifted;
+    Int4RangeSet result;
+    ArrayType *output;
+
+    // check for NULLS. Diff from empty check
+    if (PG_ARGISNULL(0)){
+        PG_RETURN_NULL();
+    }
+    
+    rangeTypeOID = TypenameGetTypid(PRIMARY_DATA_TYPE);
+    typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);
+    
+    input = PG_GETARG_RANGE_P(0);
+    unlifted = deserialize_RangeType(input, typcache);
+
+    result = lift_range_local(unlifted);
+    output = serialize_ArrayType(result, typcache);
+
+    PG_RETURN_ARRAYTYPE_P(output);
+}
+
 
 // FIXME- fix the local code for this. need to account for NULL. should be simple fix
 // also figure out of can make a single helperFunction_helper that takes in optinal parameters
@@ -870,7 +901,7 @@ set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElemen
 // To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
 // neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
 // Parameter: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MAX()
+// Returns: a ArrayType Datum as argument to SUM()
 */
 Datum
 combine_range_mult_sum(PG_FUNCTION_ARGS) 
@@ -878,14 +909,15 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     // inputs/ outputs
     RangeType *input; 
     RangeType *mult_input;
-    RangeType *output;
+    Int4RangeSet output;
+    ArrayType *rv;
     
     // working type
     Int4Range input_i4r;
-    Int4Range result_i4r;
     Int4Range mult_i4r;
+    Int4RangeSet lifted;
 
-    int neutral_element;
+    // int neutral_element;
     TypeCacheEntry *typcache;
     TypeCacheEntry *typcacheMult;
     
@@ -897,9 +929,6 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
 
-    // hardcoded //FIXME
-    neutral_element = 0;
-
     // deserialize, operate on, serialize, return
     input_i4r = deserialize_RangeType(input, typcache);
     mult_i4r = deserialize_RangeType(mult_input, typcacheMult);
@@ -909,17 +938,20 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
         PG_RETURN_NULL();
     }
 
-    result_i4r = range_mult_combine_helper_sum(input_i4r, mult_i4r, neutral_element);
-    output = serialize_RangeType(result_i4r, typcache);
+    lifted = lift_range_local(input_i4r);
 
-    PG_RETURN_ARRAYTYPE_P(output);
+    // normalizes before return
+    output = interval_agg_combine_set_mult(lifted, mult_i4r);
+    rv = serialize_ArrayType(output, typcache);
+
+    PG_RETURN_ARRAYTYPE_P(rv);
 }
 
 /*
-// To be called inside a MAX aggregation call. This multiplies the Set and multiplicity together.
+// To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
 // neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
 // Parameter: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MAX()
+// Returns: a ArrayType Datum as argument to SUM()
 */
 Datum
 combine_set_mult_sum(PG_FUNCTION_ARGS) 
@@ -1821,7 +1853,7 @@ agg_avg_set_finalfunc(PG_FUNCTION_ARGS)
     elemTypeOID = TypenameGetTypid("int4range");
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
     
-    liftedCount = lift_range(state->count);
+    liftedCount = lift_range_local(state->count);            // count == mult i4r here
     avg = range_set_divide_internal(state->sum, liftedCount);
     result = serialize_ArrayType(avg, typcache);
     

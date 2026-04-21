@@ -129,15 +129,16 @@ Int4Range lift_scalar_local(int x){
   Int4Range rv;
   rv.lower = x;
   rv.upper = x+1;
-  
+  rv.isNull = false;
   return rv;
 }
 
 // lift a single Int4Range into a Int4RangeSet
-Int4RangeSet lift_range(Int4Range a){
+Int4RangeSet lift_range_local(Int4Range a){
   Int4RangeSet rv;
   rv.count = 1;
-  rv.ranges = malloc(sizeof(Int4Range));
+  rv.containsNull = false;
+  rv.ranges = (Int4Range *) malloc(sizeof(Int4Range));
   rv.ranges[0] = a;
 
   return rv;
@@ -510,18 +511,24 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   return filteredVals;
 }
 
-// testing agg
+// combines every range in Set with every integer value in mult. (Sn x Mn) operation
 Int4RangeSet
 interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     Int4RangeSet result;
     int total_result_ranges;
-    // bool leftNull, rightNull;
     int i;
     int j;
     int idx;
     Int4RangeSet multSet;
     Int4RangeSet tempResult;
     Int4RangeSet normOutput;
+    // bool appendNULL = false;
+
+    if (set1.count == 0)
+      return set1;
+
+    if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull)
+      return empty_set();
 
     total_result_ranges = set1.count * (mult.upper - mult.lower);
     
@@ -529,41 +536,37 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     result.containsNull = false;
     result.ranges = palloc(sizeof(Int4Range) * total_result_ranges);
     
-    // check if either side produces null. Append NULL to result later
-    // leftNull = set1.containsNull;
-    // rightNull = mult.lower == 0;
-    
     idx = 0;
     // traverse thru every set/mult combination and union result
     for (i = mult.lower; i < mult.upper; i++) {
-        // ignore mult == 0 bc it produced NULL flag
-        if (i == 0) {
-            continue;
-        }
+      // ignore mult == 0 bc it produced NULL flag
+      if (i == 0) {
+        // appendNULL = true;  
+        continue;
+      }
 
-        multSet.containsNull = false;
-        multSet.count = 1;
-        multSet.ranges = palloc(sizeof(Int4Range));
-        multSet.ranges[0].lower = i;
-        multSet.ranges[0].upper = i+2;      // account for exclusive UB representation 
-        multSet.ranges[0].isNull = false;
+      multSet.containsNull = false;
+      multSet.count = 1;
+      multSet.ranges = palloc(sizeof(Int4Range));
+      multSet.ranges[0].lower = i;
+      multSet.ranges[0].upper = i+1;      // account for exclusive UB representation 
+      multSet.ranges[0].isNull = false;
 
-        tempResult = range_set_multiply_internal(set1, multSet);
-        pfree(multSet.ranges);
+      tempResult = range_set_multiply_internal(set1, multSet);
+      pfree(multSet.ranges);
 
-        // union in new results
-        for (j = 0; i < tempResult.count; j++) {
-            result.ranges[idx] = tempResult.ranges[j];
-            idx++;
-        }
+      // union in new results
+      for (j = 0; j < tempResult.count; j++) {
+          result.ranges[idx] = tempResult.ranges[j];
+          idx++;
+      }
 
-        pfree(tempResult.ranges);
-        // have allocated space with count pointer incrementing with each union
+      pfree(tempResult.ranges);
     }
     result.count = idx;
 
+    // normalize before returning
     normOutput = normalize(result);
-
     pfree(result.ranges);
     
     return normOutput;
