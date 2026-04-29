@@ -809,7 +809,8 @@ internal_agg_sum_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
 }
 
 // returns range if mult.lb > 0. otherwise return neutral element and a NULL range
-Int4Range internal_agg_min_max_combine_range_mult(Int4Range range, Int4Range mult, int64 neutral_elem) {
+// compare with function below this one...?
+Int4Range internal_agg_min_max_combine_range_mult2(Int4Range range, Int4Range mult, int64 neutral_elem) {
   Int4Range result;
   result = range;
 
@@ -833,8 +834,9 @@ Int4Range internal_agg_min_max_combine_range_mult(Int4Range range, Int4Range mul
   return range;
 }
 
-// returns range if mult.lb > 0. otherwise return NULL which represents neutral element (i think)
-Int4Range internal_agg_min_max_combine_range_mult2(Int4Range range, Int4Range mult) {
+// returns val if mult.lb > 0. otherwise return NULL which represents neutral element (i think)
+// compare with function above this one...?
+Int4Range internal_agg_min_max_combine_range_mult(Int4Range val, Int4Range mult) {
   Int4Range neutral;
   neutral.lower  = 0;
   neutral.upper  = 0;
@@ -842,12 +844,31 @@ Int4Range internal_agg_min_max_combine_range_mult2(Int4Range range, Int4Range mu
 
   // invalid or empty mult 
   if (mult.isNull || mult.upper <= mult.lower || mult.lower < 0)
-      return neutral;
+    return neutral;
 
   // [0,1) mult == exactly zero
   if (mult.lower == 0 && mult.upper == 1)
-      return neutral;
+    return neutral;
 
   // otherwise contribute
-  return range;
+  return val;
+}
+
+// returns val if mult.lb > 0. otherwise return NULL which represents neutral element (i think)
+Int4RangeSet internal_agg_min_max_combine_set_mult(Int4RangeSet val, Int4Range mult) {
+  Int4RangeSet neutral;
+  neutral.ranges = NULL;
+  neutral.count = 0;
+  neutral.containsNull = true;  // caller must PG_RETURN_NULL() on this 
+
+  // invalid or empty mult 
+  if (mult.isNull || mult.upper <= mult.lower || mult.lower < 0)
+    return neutral;
+
+  // [0,1) mult == exactly zero
+  if (mult.lower == 0 && mult.upper == 1)
+    return neutral;
+
+  // otherwise contribute
+  return val;
 }

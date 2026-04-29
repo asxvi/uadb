@@ -329,12 +329,12 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
 }
 
 /* assign generic int64 internal either a int32 or int64 */
-#define DatumGetInt64Generic(datum, typcache) {\
-    ((typcache)->typlen == 4 ? (int64)DatumGetInt32(datum) : DatumGetInt64(datum))
+#define DatumGetInt64Generic(datum, typcache) {                                     \
+    ((typcache)->typlen == 4 ? (int64)DatumGetInt32(datum) : DatumGetInt64(datum))  \
 }
 
-/* template for combining range with mult. Special case on mult=[0,0]. 
-* More detail in respective calls and internal_agg_min_max_combine_range_mult2 func
+/* template for combining RANGE with mult. Special case on mult=[0,0]. 
+* More detail in respective calls and internal_agg_min_max_combine_range_mult func
 */
 #define COMBINE_RANGE_MULT_MINMAX_BODY()                                        \
 do {                                                                            \
@@ -346,18 +346,45 @@ do {                                                                            
                                                                                 \
     range_input   = PG_GETARG_RANGE_P(0);                                      \
     mult_input    = PG_GETARG_RANGE_P(1);                                       \
-    typcacheRange = lookup_type_cache(range_input->rangetypid,                  \
-                                      TYPECACHE_RANGE_INFO);                    \
-    typcacheMult  = lookup_type_cache(mult_input->rangetypid,                   \
-                                      TYPECACHE_RANGE_INFO);                    \
+    typcacheRange = lookup_type_cache(range_input->rangetypid, TYPECACHE_RANGE_INFO); \
+    typcacheMult  = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO); \
                                                                                 \
     range  = deserialize_RangeType(range_input, typcacheRange);                 \
     mult   = deserialize_RangeType(mult_input,  typcacheMult);                  \
-    result = internal_agg_min_max_combine_range_mult2(range, mult);             \
+    result = internal_agg_min_max_combine_range_mult(range, mult);             \
                                                                                 \
     if (result.isNull) PG_RETURN_NULL();                                        \
     output = serialize_RangeType(result, typcacheRange);                        \
     PG_RETURN_RANGE_P(output);                                                  \
+} while(0)
+
+/* template for combining SET with mult. Special case on mult=[0,0]. 
+* More detail in respective calls and internal_agg_min_max_combine_range_mult func
+*/
+#define COMBINE_SET_MULT_MINMAX_BODY()                                          \
+do {                                                                            \
+    ArrayType      *input, *output;                                             \
+    RangeType      *mult_input;                                                 \
+    Int4RangeSet    set, result;                                                \
+    Int4Range       mult;                                                       \
+    TypeCacheEntry *typcache, *typcacheMult;                                    \
+                                                                                \
+    HANDLE_EITHER_ARG_ISNULL();                                                 \
+                                                                                \
+    input        = PG_GETARG_ARRAYTYPE_P(0);                                    \
+    mult_input   = PG_GETARG_RANGE_P(1);                                        \
+                                                                                \
+    /* need a RangeType to look up typcache — get it from array element type */ \
+    typcache     = lookup_type_cache(ARR_ELEMTYPE(input), TYPECACHE_RANGE_INFO); \
+    typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);\
+                                                                                \
+    set    = deserialize_ArrayType(input, typcache);                            \
+    mult   = deserialize_RangeType(mult_input, typcacheMult);                   \
+    result = internal_agg_min_max_combine_set_mult(set, mult);                  \
+                                                                                \
+    if (result.containsNull) PG_RETURN_NULL();                                  \
+    output = serialize_ArrayType(result, typcache);                             \
+    PG_RETURN_ARRAYTYPE_P(output);                                              \
 } while(0)
 
 /*Function declarations*/
@@ -1403,8 +1430,8 @@ agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
 ////////////////////////////////////////////////////////////////////////////////////
 
 /*
-// To be called inside a MIN aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
-// Returns: a RangeType Datum as argument to MIN()
+// To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
+// Returns: a RangeType Datum as argument to MIN() or MAX()
 */
 Datum
 combine_range_mult_min(PG_FUNCTION_ARGS) 
@@ -1413,8 +1440,8 @@ combine_range_mult_min(PG_FUNCTION_ARGS)
 }
 
 /*
-// To be called inside a MAX aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
-// Returns: a RangeType Datum as argument to MIN()
+// To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
+// Returns: a RangeType Datum as argument to MIN() or MAX()
 */
 Datum
 combine_range_mult_max(PG_FUNCTION_ARGS) 
@@ -1423,95 +1450,110 @@ combine_range_mult_max(PG_FUNCTION_ARGS)
 }
 
 /*
-// To be called inside a MIN aggregation call. This multiplies the Set and multiplicity together.
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
-// Parameter: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MIN()
+// To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
+// Args: ArrayType (data col), RangeType (multiplicity)
+// Returns: a ArrayType Datum as argument to MIN() or MAX()
 */
 Datum
 combine_set_mult_min(PG_FUNCTION_ARGS) 
 {
-    ArrayType *set_input;
-    RangeType *mult_input;
-
-    Int4RangeSet set1;
-    ArrayType *output;
-
-    TypeCacheEntry *typcacheSet;
-
-    HANDLE_EITHER_ARG_ISNULL();
-
-    set_input  = PG_GETARG_ARRAYTYPE_P(0);
-    mult_input = PG_GETARG_RANGE_P(1);
-
-    // ignore invalid multiplicity
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-        PG_RETURN_NULL();
-
-    if (RangeIsEmpty(mult_input))
-        PG_RETURN_NULL();
-
-    typcacheSet = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
-
-    set1 = deserialize_ArrayType(set_input, typcacheSet);
-
-    // empty set contributes nothing
-    if (set1.count == 0) {
-        pfree(set1.ranges);
-        PG_RETURN_NULL();
-    }
-
-    // identity behavior, function returns initial set input
-    output = serialize_ArrayType(set1, typcacheSet);
-
-    pfree(set1.ranges);
-
-    PG_RETURN_ARRAYTYPE_P(output);
+    COMBINE_SET_MULT_MINMAX_BODY();
 }
 
+/*
+// To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
+// Args: ArrayType (data col), RangeType (multiplicity)
+// Returns: a ArrayType Datum as argument to MIN() or MAX()
+*/
 Datum
 combine_set_mult_max(PG_FUNCTION_ARGS) 
 {
-    ArrayType *set_input;
-    RangeType *mult_input;
-    ArrayType *output;
-
-    Int4Range mult;
-    Int4RangeSet set1;
-
-    TypeCacheEntry *typcacheSet, *typcacheMult;
-
-    HANDLE_EITHER_ARG_ISNULL();
-
-    set_input  = PG_GETARG_ARRAYTYPE_P(0);
-    mult_input = PG_GETARG_RANGE_P(1);
-
-    if (RangeIsEmpty(mult_input)) {
-        PG_RETURN_NULL();
-    }
-
-    typcacheSet  = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
-    typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-
-    mult = deserialize_RangeType(mult_input, typcacheMult);
-
-    if (mult.lower == 0) {
-        PG_RETURN_NULL();
-    }
-
-    set1 = deserialize_ArrayType(set_input, typcacheSet);
-
-    if (set1.count == 0) {
-        pfree(set1.ranges);
-        PG_RETURN_NULL();
-    }
-
-    output = serialize_ArrayType(set1, typcacheSet);
-
-    pfree(set1.ranges);
-
-    PG_RETURN_ARRAYTYPE_P(output);
+    COMBINE_SET_MULT_MINMAX_BODY();
 }
+// Datum
+// combine_set_mult_min(PG_FUNCTION_ARGS) 
+// {
+//     ArrayType *set_input;
+//     RangeType *mult_input;
+
+//     Int4RangeSet set1;
+//     ArrayType *output;
+
+//     TypeCacheEntry *typcacheSet;
+
+//     HANDLE_EITHER_ARG_ISNULL();
+
+//     set_input  = PG_GETARG_ARRAYTYPE_P(0);
+//     mult_input = PG_GETARG_RANGE_P(1);
+
+//     // ignore invalid multiplicity
+//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+//         PG_RETURN_NULL();
+
+//     if (RangeIsEmpty(mult_input))
+//         PG_RETURN_NULL();
+
+//     typcacheSet = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
+
+//     set1 = deserialize_ArrayType(set_input, typcacheSet);
+
+//     // empty set contributes nothing
+//     if (set1.count == 0) {
+//         pfree(set1.ranges);
+//         PG_RETURN_NULL();
+//     }
+
+//     // identity behavior, function returns initial set input
+//     output = serialize_ArrayType(set1, typcacheSet);
+
+//     pfree(set1.ranges);
+
+//     PG_RETURN_ARRAYTYPE_P(output);
+// }
+
+// Datum
+// combine_set_mult_max(PG_FUNCTION_ARGS) 
+// {
+//     ArrayType *set_input;
+//     RangeType *mult_input;
+//     ArrayType *output;
+
+//     Int4Range mult;
+//     Int4RangeSet set1;
+
+//     TypeCacheEntry *typcacheSet, *typcacheMult;
+
+//     HANDLE_EITHER_ARG_ISNULL();
+
+//     set_input  = PG_GETARG_ARRAYTYPE_P(0);
+//     mult_input = PG_GETARG_RANGE_P(1);
+
+//     if (RangeIsEmpty(mult_input)) {
+//         PG_RETURN_NULL();
+//     }
+
+//     typcacheSet  = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
+//     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
+
+//     mult = deserialize_RangeType(mult_input, typcacheMult);
+
+//     if (mult.lower == 0) {
+//         PG_RETURN_NULL();
+//     }
+
+//     set1 = deserialize_ArrayType(set_input, typcacheSet);
+
+//     if (set1.count == 0) {
+//         pfree(set1.ranges);
+//         PG_RETURN_NULL();
+//     }
+
+//     output = serialize_ArrayType(set1, typcacheSet);
+
+//     pfree(set1.ranges);
+
+//     PG_RETURN_ARRAYTYPE_P(output);
+// }
 
 /*
 State Transition function for max aggregate
