@@ -328,6 +328,10 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     PG_RETURN_ARRAYTYPE_P(output);                                      \
 }
 
+/* assign generic int64 internal either a int32 or int64 */
+#define DatumGetInt64Generic(datum, typcache) \
+    ((typcache)->typlen == 4 ? (int64)DatumGetInt32(datum) : DatumGetInt64(datum))
+
 /*Function declarations*/
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
 int logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4RangeSet, Int4RangeSet) );
@@ -909,7 +913,7 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     lifted = lift_range_local(input_i4r);
 
     // normalizes before return
-    output = interval_agg_combine_set_mult(lifted, mult_i4r);
+    output = internal_agg_combine_set_mult(lifted, mult_i4r);
     rv = serialize_ArrayType(output, typcache);
 
     PG_RETURN_ARRAYTYPE_P(rv);
@@ -962,7 +966,7 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     }
 
     // output is normalized before returned
-    result = interval_agg_combine_set_mult(set1, mult);
+    result = internal_agg_combine_set_mult(set1, mult);
     output = serialize_ArrayType(result, typcacheSet);
     
     // clean
@@ -1380,9 +1384,9 @@ combine_range_mult_min(PG_FUNCTION_ARGS)
 {
     RangeType *range_input, *mult_input, *output;
     Int4Range range, mult, result;
-    int neutral_element;
+    Datum neutral_datum;
+    int64 neutral_val;
     TypeCacheEntry *typcacheRange, *typcacheMult;
-    
     // need better handling of mult null
     HANDLE_EITHER_ARG_ISNULL();
 
@@ -1390,13 +1394,16 @@ combine_range_mult_min(PG_FUNCTION_ARGS)
     mult_input = PG_GETARG_RANGE_P(1);
     typcacheRange = lookup_type_cache(range_input->rangetypid, TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-    
-    // hardcoded //FIXME
-    neutral_element = INT_MAX;
+     
+    // get respective neutral element
+    neutral_datum = get_neutral_element(range_input->rangetypid, MONOID_MIN);
+    neutral_val = DatumGetInt64Generic(neutral_datum, typcacheRange);
 
+    // convert
     range = deserialize_RangeType(range_input, typcacheRange);
     mult = deserialize_RangeType(mult_input, typcacheMult);
 
+    // operate and serialize
     result = range_mult_combine_helper(range, mult, neutral_element);    
     output = serialize_RangeType(result, typcacheRange);
 

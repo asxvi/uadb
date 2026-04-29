@@ -137,7 +137,7 @@ Int4Range lift_scalar_local(int x){
 Int4RangeSet lift_range_local(Int4Range a){
   Int4RangeSet rv;
   rv.count = 1;
-  rv.containsNull = false;
+  rv.containsNull = a.isNull;
   rv.ranges = (Int4Range *) malloc(sizeof(Int4Range));
   rv.ranges[0] = a;
 
@@ -514,58 +514,58 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
 
 // combines every range in Set with every integer value in mult. (Sn x Mn) operation
 Int4RangeSet
-interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
+internal_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     Int4RangeSet result;
     int total_result_ranges;
     int i;
     int j;
     int idx;
+    Int4Range stack[1];   // create array size 1 on stack
     Int4RangeSet multSet;
     Int4RangeSet tempResult;
     Int4RangeSet normOutput;
 
-    if (set1.count == 0)
+    if (set1.count == 0) {
       return empty_set();  
-      // return set1; 
+    }
 
-    if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull)
+    if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull) {
       return empty_set();
+    }
 
     total_result_ranges = set1.count * (mult.upper - mult.lower);
-    
     result.count = 0;
     result.containsNull = false;
     result.ranges = palloc(sizeof(Int4Range) * total_result_ranges);
     
+    multSet.count = 1;
+    multSet.ranges = stack;
+    multSet.containsNull = false;
+
     idx = 0;
-    
     // traverse thru every set/mult combination and union result
     for (i = mult.lower; i < mult.upper; i++) {
-      
       // ignore mult == 0 bc it produced NULL flag
-      if (i == 0) {
-        continue;
-      }
-
-      // lift mult from range to set
-      multSet.containsNull = false;
-      multSet.count = 1;
-      multSet.ranges = palloc(sizeof(Int4Range));
+      if (i == 0) continue;
+      
+      // temp lifted mult x -> [x, x+1)
       multSet.ranges[0].lower = i;
-      multSet.ranges[0].upper = i+1;      // account for exclusive UB representation 
+      multSet.ranges[0].upper = i+1;
       multSet.ranges[0].isNull = false;
-
+    
       // combine
       tempResult = range_set_multiply_internal(set1, multSet);
-      pfree(multSet.ranges);
 
       // union in new results
       for (j = 0; j < tempResult.count; j++) {
+        if (idx >= total_result_ranges) {
+          elog(ERROR, "internal_agg_combine_set_mult: Internal error: exceeded pre-allocated range set size");
+        }
         result.ranges[idx] = tempResult.ranges[j];
         idx++;
       }
-
       pfree(tempResult.ranges);
+
     }
     result.count = idx;
 
@@ -781,4 +781,19 @@ Int4RangeSet union_set(Int4RangeSet a, Int4RangeSet b) {
   }
 
   return result;
+}
+
+// multiply each element in set by scalar. used with Set x MULT
+Int4RangeSet range_set_multiply_scalar(Int4RangeSet set1, int32 scalar) {
+    Int4RangeSet result;
+    result.count = set1.count;
+    result.ranges = palloc(sizeof(Int4Range) * set1.count);
+    
+    for (int i = 0; i < set1.count; i++) {
+        // pointwise
+        result.ranges[i].lower = set1.ranges[i].lower * scalar;
+        result.ranges[i].upper = set1.ranges[i].upper * scalar;
+        result.ranges[i].isNull = set1.ranges[i].isNull;
+    }
+    return result;
 }

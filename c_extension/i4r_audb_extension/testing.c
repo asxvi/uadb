@@ -273,7 +273,7 @@
 // }
 
 // Int4RangeSet
-// interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
+// internal_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
 //     Int4RangeSet result;
 //     bool leftNull, rightNull;
 //     int total_result_ranges;
@@ -533,7 +533,7 @@
 //   // printRangeSet(rv2);
 
 
-//   // Int4RangeSet rv3 = interval_agg_combine_set_mult(s2, a);
+//   // Int4RangeSet rv3 = internal_agg_combine_set_mult(s2, a);
 //   // printRangeSet(rv3);
 
 //   Int4Range c_ranges[] = {a,b,c};
