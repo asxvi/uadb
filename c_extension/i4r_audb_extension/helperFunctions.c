@@ -404,6 +404,7 @@ Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep){
   Int4RangeSet sortedInput;
   int currNumRanges;
 
+  // nothing to reduce
   if (vals.count <= numRangesKeep){
     return vals;
   }

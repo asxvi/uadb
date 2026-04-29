@@ -1,3 +1,7 @@
+"""
+    attempts to run experiments on sets with 1..N outliers. currently just rightmost outliers
+"""
+
 from dataclasses import replace
 
 from cliUtility import *
@@ -11,13 +15,6 @@ experiments is a dict of {str: ExperimentGroup}. ALlows for many unrelated exper
 Naming convention is "GroupName/ID": {ExperimentGroup of related experiments}
 persists in namespace of caller program
 '''
-
-# # # zipf = DistributionConfig(DistributionType=DistributionType.ZIPFIAN, width_zipf_a=1, pos_zipf_a=1.5)
-# zipf = DistributionConfig(
-#     distribution=DistributionType.ZIPFIAN,
-#     pos_zipf_a=1.8,
-#     width_zipf_a=1.5,
-# )
 
 experiments = dict()
 
@@ -34,7 +31,6 @@ template = ExperimentSettings(
     gap_size_range=(0,100), 
     name= "temp",
     reduce_triggerSz_sizeLim=(10, 5),
-    # distribution_config=zipf,
 )
 
 # def ni_gap_sweep_outlier(gap_sizes: list, max_ni: int = 10, n_list: list = None, trigger_size: int = 10, reduce_to_size: int = 5, gap_width: int = 1):

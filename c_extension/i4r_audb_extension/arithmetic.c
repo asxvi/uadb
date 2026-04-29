@@ -6,6 +6,7 @@
 #define malloc palloc
 #define free pfree
 
+// range 1 + range 2
 Int4Range range_add_internal(Int4Range a, Int4Range b){
     Int4Range rv;
 
@@ -30,7 +31,7 @@ Int4Range range_add_internal(Int4Range a, Int4Range b){
     return rv;
 }
 
-// parameter 1 - parameter 2
+// range 1 - range 2
 Int4Range range_subtract_internal(Int4Range a, Int4Range b){
     Int4Range rv;
     
@@ -50,6 +51,7 @@ Int4Range range_subtract_internal(Int4Range a, Int4Range b){
     return rv;
 }
 
+// range 1 * range 2
 Int4Range range_multiply_internal(Int4Range a, Int4Range b){
     Int4Range rv;
     int arr[4];
@@ -73,7 +75,8 @@ Int4Range range_multiply_internal(Int4Range a, Int4Range b){
     return rv;
 }
 
-// divison with a bound crossing 0 should be 0 or ???
+// range 1 / range 2
+// (divison with a bound crossing 0 should be 0 or ???)
 Int4Range range_divide_internal(Int4Range a, Int4Range b){
     Int4Range rv;
     int arr[4];

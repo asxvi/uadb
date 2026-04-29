@@ -1,12 +1,12 @@
 // source files
-#include "postgres.h"           // root
-#include "fmgr.h"               // "..must be included by all Postgres modules"
-#include "utils/rangetypes.h"   // RangeType
-#include "utils/array.h"        // ArrayType
-#include "utils/typcache.h"     // data type cache
-#include "utils/lsyscache.h"    // "Convenience routines for common queries in the system catalog cache."
-#include "catalog/pg_type_d.h"  // pg_type oid macros
-#include "catalog/namespace.h"  // type helpers
+#include "postgres.h"           // src
+#include "fmgr.h"               // must be included
+#include "utils/rangetypes.h"   // rangeType
+#include "utils/array.h"        // arrayType
+#include "utils/typcache.h"     // speed type lookup
+#include "utils/lsyscache.h"    // typcache convenience functions 
+#include "catalog/pg_type_d.h"  // pg_type OIDs
+#include "catalog/namespace.h"  // get typenames
 #include "funcapi.h"
 
 // local code
@@ -58,7 +58,6 @@ PG_FUNCTION_INFO_V1(prune_range_gte);
 PG_FUNCTION_INFO_V1(prune_range_eq);
 PG_FUNCTION_INFO_V1(prune_range_and);
 PG_FUNCTION_INFO_V1(prune_range_or);
-
 PG_FUNCTION_INFO_V1(prune_set_lt);
 PG_FUNCTION_INFO_V1(prune_set_lte);
 PG_FUNCTION_INFO_V1(prune_set_gt);
@@ -110,7 +109,7 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
 
 /// check for NULLS parameters. Different from empty range check
 //  returns the parameter that is not null
-#define CHECK_BINARY_PGARG_NULL_ARGS()                          \
+#define HANDLE_BOTH_ARG_ISNULL()                          \
     do {                                                        \
         if (PG_ARGISNULL(0) && PG_ARGISNULL(1))                 \
             PG_RETURN_NULL();                                   \
@@ -121,7 +120,7 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
     } while (0)
 
 // returns NULL on either PGARG(0) OR PGARG(1)
-#define CHECK_BINARY_PGARG_NULL_OR()                            \
+#define HANDLE_EITHER_ARG_ISNULL()                               \
     do {                                                        \
         if (PG_ARGISNULL(0) || PG_ARGISNULL(1))                 \
             PG_RETURN_NULL();                                   \
@@ -134,7 +133,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     RangeType *r1;                                                  \
     RangeType *r2;                                                  \
     RangeType *output;                                              \
-    CHECK_BINARY_PGARG_NULL_ARGS();                                 \
+    HANDLE_BOTH_ARG_ISNULL();                                        \
     r1 = PG_GETARG_RANGE_P(0);                                      \
     r2 = PG_GETARG_RANGE_P(1);                                      \
     output = arithmetic_range_helper(r1, r2, internal_func);        \
@@ -148,7 +147,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     ArrayType *a1;                                                  \
     ArrayType *a2;                                                  \
     ArrayType *output;                                              \
-    CHECK_BINARY_PGARG_NULL_OR();                                 \
+    HANDLE_EITHER_ARG_ISNULL();                                      \
     a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
     a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
     output = arithmetic_set_helper(a1, a2, internal_func);          \
@@ -162,7 +161,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     RangeType *r1;                                                  \
     RangeType *r2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_OR();                                   \
+    HANDLE_EITHER_ARG_ISNULL();                                      \
     r1 = PG_GETARG_RANGE_P(0);                                      \
     r2 = PG_GETARG_RANGE_P(1);                                      \
     rv = logical_range_helper(r1, r2, internal_func);               \
@@ -179,7 +178,7 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     ArrayType *a1;                                                  \
     ArrayType *a2;                                                  \
     int rv;                                                         \
-    CHECK_BINARY_PGARG_NULL_OR();                                   \
+    HANDLE_EITHER_ARG_ISNULL();                                   \
     a1 = PG_GETARG_ARRAYTYPE_P(0);                                  \
     a2 = PG_GETARG_ARRAYTYPE_P(1);                                  \
     rv = logical_set_helper(a1, a2, internal_func);                 \
@@ -189,7 +188,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     PG_RETURN_BOOL((bool)rv);                                       \
 }
 
-/* prune/ cuts away impossible values based on logical condition (lt, gt, lte, gte, eq)*/
+/* range- prune/cuts away impossible values based on logical condition (lt, gt, lte, gte, eq)
+ * contains direction */
 #define DEFINE_PRUNE_RANGE_FUNC_COMPARISON(func_name, internal_func)           \
 Datum func_name(PG_FUNCTION_ARGS)                                   \
 {                                                                   \
@@ -212,6 +212,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                   \
     PG_RETURN_RANGE_P(output);                                      \
 }
 
+/* prune/cuts away impossible values based on logical condition (and, eq)
+ * does not contain direction */
 #define DEFINE_PRUNE_RANGE_FUNC_LOGICAL(func_name, internal_func)       \
 Datum func_name(PG_FUNCTION_ARGS)                                       \
 {                                                                       \
@@ -230,6 +232,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     PG_RETURN_RANGE_P(output);                                          \
 }
 
+/* prune/cuts away impossible values based on logical condition (OR)
+ * special case bc it can grow. 2 rangetypes == arraytype worst case */
 #define DEFINE_PRUNE_RANGE_FUNC_LOGICAL_OR(func_name, internal_func)    \
 Datum func_name(PG_FUNCTION_ARGS)                                       \
 {                                                                       \
@@ -290,6 +294,8 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     PG_RETURN_ARRAYTYPE_P(output);                                      \
 }
 
+/* set- prune/cuts away impossible values based on logical condition (lt, gt, lte, gte, eq)
+ * contains direction */
 #define DEFINE_PRUNE_SET_FUNC_COMPARISON(func_name, internal_func)         \
 Datum func_name(PG_FUNCTION_ARGS)                                       \
 {                                                                       \
@@ -315,7 +321,6 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     if (result.count == 0 && !result.containsNull) {                    \
         PG_RETURN_NULL();                                               \
     }                                                                   \
-                                                                        \
     norm_result = normalize(result);                                    \
     output = serialize_ArrayType(norm_result, typcache);                \
     if (result.ranges)                                                  \
@@ -326,11 +331,11 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
 }
 
 /*Function declarations*/
-RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
-ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
-ArrayType* helperFunctions_helper( ArrayType *input, Int4RangeSet (*callback)() );
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
 int logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4RangeSet, Int4RangeSet) );
+ArrayType* helperFunctions_helper( ArrayType *input, Int4RangeSet (*callback)() );
+RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
+ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
 
 // for min/max agg
 // can all be added to helperFunctions.h
@@ -540,7 +545,6 @@ lift_range(PG_FUNCTION_ARGS)
 Datum
 set_reduce_size(PG_FUNCTION_ARGS)
 // FIXME- fix the local code for this. need to account for NULL. should be simple fix
-// also figure out of can make a single helperFunction_helper that takes in optinal parameters
 {
     ArrayType *inputArray;
     int32 numRangesKeep;
@@ -725,6 +729,7 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
     set1 = deserialize_ArrayType(input1, typcache);
     set2 = deserialize_ArrayType(input2, typcache);
 
+    // handle EMPTY cases
     if(set1.containsNull && set1.count == 1) {
         output = serialize_ArrayType(set2, typcache);
         pfree(set1.ranges);
@@ -753,7 +758,7 @@ arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callb
 }
 
 /*
-Generic Helper for logical operations on ArrayTypes of RangeTypes.
+Generic Helper for logical operations on RangeTypes.
 Deserializes data, performs operation on data, returns int (3VL boolean) result
 * Parameters(3): 
     -input1 RangeType: Int4Range, NON-NULL
@@ -788,9 +793,9 @@ logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4R
 Generic Helper for logical operations on ArrayTypes of RangeTypes.
 Deserializes data, performs operation on data, returns int (3VL boolean) result
 * Parameters(3): 
-    -input1 RangeType: Int4Range, NON-NULL
-    -input2 RangeType: Int4Range, NON-NULL
-    -function ptr callback: Int4Range function()   
+    -input1 ArrayType: Int4Range[], NON-NULL
+    -input2 ArrayType: Int4Range[], NON-NULL
+    -function ptr callback: Int4RangeSet function()   
 * Return(1):
     -int result (3VL)
 */
@@ -914,7 +919,7 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcache;
     TypeCacheEntry *typcacheMult;
     
-    CHECK_BINARY_PGARG_NULL_OR();
+    HANDLE_EITHER_ARG_ISNULL();
     
     input = PG_GETARG_RANGE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
@@ -963,7 +968,7 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcacheSet;
     TypeCacheEntry *typcacheMult;
     
-    CHECK_BINARY_PGARG_NULL_OR();
+    HANDLE_EITHER_ARG_ISNULL();
     
     set_input = PG_GETARG_ARRAYTYPE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
@@ -1178,7 +1183,7 @@ agg_sum_range_transfunc(PG_FUNCTION_ARGS)
 
     result = arithmetic_range_helper(state, input, range_add_internal);
 
-    PG_RETURN_ARRAYTYPE_P(result);
+    PG_RETURN_RANGE_P(result);
 }
 
 /*
@@ -1362,7 +1367,7 @@ combine_range_mult_min(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcacheRange, *typcacheMult;
     
     // need better handling of mult null
-    CHECK_BINARY_PGARG_NULL_OR();
+    HANDLE_EITHER_ARG_ISNULL();
 
     range_input = PG_GETARG_RANGE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
@@ -1394,7 +1399,7 @@ combine_range_mult_max(PG_FUNCTION_ARGS)
     int neutral_element;
     TypeCacheEntry *typcacheRange, *typcacheMult;
     
-    CHECK_BINARY_PGARG_NULL_OR();
+    HANDLE_EITHER_ARG_ISNULL();
     
     range_input = PG_GETARG_RANGE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
@@ -1422,36 +1427,40 @@ combine_range_mult_max(PG_FUNCTION_ARGS)
 Datum
 combine_set_mult_min(PG_FUNCTION_ARGS) 
 {
-   // inputs/ outputs
-    ArrayType *set_input, *output;
+    ArrayType *set_input;
     RangeType *mult_input;
-    
-    // working type
-    Int4Range mult;
-    Int4RangeSet set1, result;
 
-    int neutral_element;
-    TypeCacheEntry *typcacheSet, *typcacheMult;
-    
-    CHECK_BINARY_PGARG_NULL_OR();
-    
-    set_input = PG_GETARG_ARRAYTYPE_P(0);
+    Int4RangeSet set1;
+    ArrayType *output;
+
+    TypeCacheEntry *typcacheSet;
+
+    HANDLE_EITHER_ARG_ISNULL();
+
+    set_input  = PG_GETARG_ARRAYTYPE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
 
-    typcacheSet = lookup_type_cache(set_input->elemtype, TYPECACHE_RANGE_INFO);
-    typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
+    // ignore invalid multiplicity
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+        PG_RETURN_NULL();
 
-    // hardcoded //FIXME
-    neutral_element = INT_MAX;
+    if (RangeIsEmpty(mult_input))
+        PG_RETURN_NULL();
 
-    // deserialize, operate on, serialize, return
+    typcacheSet = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
+
     set1 = deserialize_ArrayType(set_input, typcacheSet);
-    mult = deserialize_RangeType(mult_input, typcacheMult);
 
-    result = set_mult_combine_helper(set1, mult, neutral_element);
-    output = serialize_ArrayType(result, typcacheSet);
+    // empty set contributes nothing
+    if (set1.count == 0) {
+        pfree(set1.ranges);
+        PG_RETURN_NULL();
+    }
+
+    // identity behavior, function returns initial set input
+    output = serialize_ArrayType(set1, typcacheSet);
+
     pfree(set1.ranges);
-    pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
@@ -1462,42 +1471,88 @@ combine_set_mult_min(PG_FUNCTION_ARGS)
 // Parameter: ArrayType (data col), RangeType (multiplicity)
 // Returns: a ArrayType Datum as argument to MAX()
 */
+// Datum
+// combine_set_mult_max(PG_FUNCTION_ARGS) 
+// {
+//     // inputs/ outputs
+//     ArrayType *set_input, *output;
+//     RangeType *mult_input;
+    
+//     // working type
+//     Int4Range mult;
+//     Int4RangeSet set1, result;
+
+//     int neutral_element;
+//     TypeCacheEntry *typcacheSet, *typcacheMult;
+    
+//     HANDLE_EITHER_ARG_ISNULL();
+    
+//     set_input = PG_GETARG_ARRAYTYPE_P(0);
+//     mult_input = PG_GETARG_RANGE_P(1);
+
+//     typcacheSet = lookup_type_cache(set_input->elemtype, TYPECACHE_RANGE_INFO);
+//     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
+
+//     // hardcoded //FIXME
+//     neutral_element = INT_MIN;
+
+//     // deserialize, operate on, serialize, return
+//     set1 = deserialize_ArrayType(set_input, typcacheSet);
+//     mult = deserialize_RangeType(mult_input, typcacheMult);
+
+//     // result = set_mult_combine_helper(set1, mult, neutral_element);
+//     result = set1;  // do not need to comine mult and val bc min/max idempotent
+//     output = serialize_ArrayType(result, typcacheSet);
+//     pfree(set1.ranges);
+//     pfree(result.ranges);
+
+//     PG_RETURN_ARRAYTYPE_P(output);
+// }
+
 Datum
 combine_set_mult_max(PG_FUNCTION_ARGS) 
 {
-    // inputs/ outputs
-    ArrayType *set_input, *output;
+    ArrayType *set_input;
     RangeType *mult_input;
-    
-    // working type
-    Int4Range mult;
-    Int4RangeSet set1, result;
+    ArrayType *output;
 
-    int neutral_element;
+    Int4Range mult;
+    Int4RangeSet set1;
+
     TypeCacheEntry *typcacheSet, *typcacheMult;
-    
-    CHECK_BINARY_PGARG_NULL_OR();
-    
-    set_input = PG_GETARG_ARRAYTYPE_P(0);
+
+    HANDLE_EITHER_ARG_ISNULL();
+
+    set_input  = PG_GETARG_ARRAYTYPE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
 
-    typcacheSet = lookup_type_cache(set_input->elemtype, TYPECACHE_RANGE_INFO);
+    if (RangeIsEmpty(mult_input)) {
+        PG_RETURN_NULL();
+    }
+
+    typcacheSet  = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
 
-    // hardcoded //FIXME
-    neutral_element = INT_MIN;
-
-    // deserialize, operate on, serialize, return
-    set1 = deserialize_ArrayType(set_input, typcacheSet);
     mult = deserialize_RangeType(mult_input, typcacheMult);
 
-    result = set_mult_combine_helper(set1, mult, neutral_element);
-    output = serialize_ArrayType(result, typcacheSet);
+    if (mult.lower == 0) {
+        PG_RETURN_NULL();
+    }
+
+    set1 = deserialize_ArrayType(set_input, typcacheSet);
+
+    if (set1.count == 0) {
+        pfree(set1.ranges);
+        PG_RETURN_NULL();
+    }
+
+    output = serialize_ArrayType(set1, typcacheSet);
+
     pfree(set1.ranges);
-    pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
+
 
 /*
 // State Transition function for min aggregate

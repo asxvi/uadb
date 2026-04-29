@@ -1,3 +1,7 @@
+"""
+    run experiments on for different data distirbutions. Normal, Zipf, etc...
+"""
+
 from dataclasses import replace
 
 from cliUtility import *

@@ -285,7 +285,7 @@ class ExperimentRunner:
         try:
             # with self.__connect_db() as conn:
             with conn.cursor() as cur:
-                print(f" DEBUG SQL- running queries for : {table}") 
+                # print(f" DEBUG SQL- running queries for : {table}") 
                 
                 # count 
                 cur.execute(f"SELECT COUNT(*) FROM {table};")
@@ -323,7 +323,7 @@ class ExperimentRunner:
                         results['prune_result_size'] = p_metrics['result_size']
                         results['prune_min_interval_count'] = p_metrics['min_interval_count']
                         results['prune_total_min_coverage'] = p_metrics['total_min_coverage']
-                        results['prune_result_coverage'] = self.__calculate_coverage(p_metrics['result'])
+                        # results['prune_result_coverage'] = self.__calculate_coverage(p_metrics['result'])
                         
         except Exception as e:
             print(f"Error running queries for {experiment.experiment_id}: {e}")
@@ -582,7 +582,7 @@ class ExperimentRunner:
             FROM {table}
             WHERE {cond};"""
         
-        print(sql)
+        # print(sql)
         cur.execute(sql)
         results = cur.fetchone()[0]
         plan_root = results[0]
@@ -661,7 +661,7 @@ class ExperimentRunner:
             ) subq;"""
         
         cur.execute(sql)
-        print(sql)
+        # print(sql)
         result = cur.fetchone()     
         if result is None:
             return None
@@ -720,7 +720,7 @@ class ExperimentRunner:
             ) subq;"""
         
         cur.execute(sql)
-        print(sql)
+        # print(sql)
         result = cur.fetchone()     
         if result is None:
             return None
@@ -754,7 +754,10 @@ class ExperimentRunner:
         '''adds all values contained within every interval in set'''
         
         cover = 0
+        # print("IS.   ", interval_set)
         for interval in interval_set:
+            if interval is None:
+                continue
             cover += interval.upper - interval.lower
         return cover
 

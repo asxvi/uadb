@@ -4,14 +4,15 @@
 #include "helperFunctions.h"    // logic for helpers
 
 // source files
-#include "postgres.h"           // root
-#include "fmgr.h"               // "..must be included by all Postgres modules"
-#include "utils/rangetypes.h"   // RangeType
-#include "utils/array.h"        // ArrayType
-#include "utils/typcache.h"     // data type cache
-#include "utils/lsyscache.h"    // "Convenience routines for common queries in the system catalog cache."
-#include "catalog/pg_type_d.h"  // pg_type oid macros
-#include "catalog/namespace.h"  // type helpers
+#include "postgres.h"           // src
+#include "fmgr.h"               // must be included
+#include "utils/rangetypes.h"   // rangeType
+#include "utils/array.h"        // arrayType
+#include "utils/typcache.h"     // speed type lookup
+#include "utils/lsyscache.h"    // typcache convenience functions 
+#include "catalog/pg_type_d.h"  // pg_type OIDs
+#include "catalog/namespace.h"  // get typenames
+#include "funcapi.h"
 
 Int4Range deserialize_RangeType(RangeType *rng, TypeCacheEntry *typcache);
 RangeType* serialize_RangeType(Int4Range range, TypeCacheEntry *typcache);
