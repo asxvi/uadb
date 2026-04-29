@@ -122,10 +122,14 @@ Int4RangeSet sort(Int4RangeSet vals);
 Int4RangeSet normalize(Int4RangeSet vals);
 Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep);
 Int4RangeSet filterOutNulls(Int4RangeSet vals);
-Int4RangeSet internal_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult);
 long totalSpan(Int4RangeSet vals);
 
 Int4RangeSet reduceSizeNN(Int4RangeSet vals, int numRangesKeep);
+
+// combine helpers
 Int4RangeSet range_set_multiply_scalar(Int4RangeSet set1, int32 scalar);
+Int4RangeSet internal_agg_sum_combine_set_mult(Int4RangeSet set1, Int4Range mult);
+Int4Range internal_agg_min_max_combine_range_mult(Int4Range range, Int4Range mult, int64 neutral_elem);
+Int4Range internal_agg_min_max_combine_range_mult2(Int4Range range, Int4Range mult);
 
 #endif

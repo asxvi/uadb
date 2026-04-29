@@ -329,8 +329,36 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
 }
 
 /* assign generic int64 internal either a int32 or int64 */
-#define DatumGetInt64Generic(datum, typcache) \
+#define DatumGetInt64Generic(datum, typcache) {\
     ((typcache)->typlen == 4 ? (int64)DatumGetInt32(datum) : DatumGetInt64(datum))
+}
+
+/* template for combining range with mult. Special case on mult=[0,0]. 
+* More detail in respective calls and internal_agg_min_max_combine_range_mult2 func
+*/
+#define COMBINE_RANGE_MULT_MINMAX_BODY()                                        \
+do {                                                                            \
+    RangeType      *range_input, *mult_input, *output;                          \
+    Int4Range       range, mult, result;                                        \
+    TypeCacheEntry *typcacheRange, *typcacheMult;                               \
+                                                                                \
+    HANDLE_EITHER_ARG_ISNULL();                                                 \
+                                                                                \
+    range_input   = PG_GETARG_RANGE_P(0);                                      \
+    mult_input    = PG_GETARG_RANGE_P(1);                                       \
+    typcacheRange = lookup_type_cache(range_input->rangetypid,                  \
+                                      TYPECACHE_RANGE_INFO);                    \
+    typcacheMult  = lookup_type_cache(mult_input->rangetypid,                   \
+                                      TYPECACHE_RANGE_INFO);                    \
+                                                                                \
+    range  = deserialize_RangeType(range_input, typcacheRange);                 \
+    mult   = deserialize_RangeType(mult_input,  typcacheMult);                  \
+    result = internal_agg_min_max_combine_range_mult2(range, mult);             \
+                                                                                \
+    if (result.isNull) PG_RETURN_NULL();                                        \
+    output = serialize_RangeType(result, typcacheRange);                        \
+    PG_RETURN_RANGE_P(output);                                                  \
+} while(0)
 
 /*Function declarations*/
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
@@ -913,7 +941,7 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     lifted = lift_range_local(input_i4r);
 
     // normalizes before return
-    output = internal_agg_combine_set_mult(lifted, mult_i4r);
+    output = internal_agg_sum_combine_set_mult(lifted, mult_i4r);
     rv = serialize_ArrayType(output, typcache);
 
     PG_RETURN_ARRAYTYPE_P(rv);
@@ -966,7 +994,7 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     }
 
     // output is normalized before returned
-    result = internal_agg_combine_set_mult(set1, mult);
+    result = internal_agg_sum_combine_set_mult(set1, mult);
     output = serialize_ArrayType(result, typcacheSet);
     
     // clean
@@ -1375,71 +1403,23 @@ agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
 ////////////////////////////////////////////////////////////////////////////////////
 
 /*
-// To be called inside a MIN aggregation call. This multiplies the range * (each m in mult)
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
+// To be called inside a MIN aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
 // Returns: a RangeType Datum as argument to MIN()
 */
 Datum
 combine_range_mult_min(PG_FUNCTION_ARGS) 
 {
-    RangeType *range_input, *mult_input, *output;
-    Int4Range range, mult, result;
-    Datum neutral_datum;
-    int64 neutral_val;
-    TypeCacheEntry *typcacheRange, *typcacheMult;
-    // need better handling of mult null
-    HANDLE_EITHER_ARG_ISNULL();
-
-    range_input = PG_GETARG_RANGE_P(0);
-    mult_input = PG_GETARG_RANGE_P(1);
-    typcacheRange = lookup_type_cache(range_input->rangetypid, TYPECACHE_RANGE_INFO);
-    typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-     
-    // get respective neutral element
-    neutral_datum = get_neutral_element(range_input->rangetypid, MONOID_MIN);
-    neutral_val = DatumGetInt64Generic(neutral_datum, typcacheRange);
-
-    // convert
-    range = deserialize_RangeType(range_input, typcacheRange);
-    mult = deserialize_RangeType(mult_input, typcacheMult);
-
-    // operate and serialize
-    result = range_mult_combine_helper(range, mult, neutral_element);    
-    output = serialize_RangeType(result, typcacheRange);
-
-    PG_RETURN_RANGE_P(output);
+    COMBINE_RANGE_MULT_MINMAX_BODY();
 }
 
 /*
-// To be called inside a MAX aggregation call. This multiplies the range and multuplicity together.
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
-// Returns: a RangeType Datum as argument to MAX()
+// To be called inside a MAX aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
+// Returns: a RangeType Datum as argument to MIN()
 */
 Datum
 combine_range_mult_max(PG_FUNCTION_ARGS) 
 {
-    RangeType *range_input, *mult_input, *output;
-    Int4Range range, mult, result;
-    int neutral_element;
-    TypeCacheEntry *typcacheRange, *typcacheMult;
-    
-    HANDLE_EITHER_ARG_ISNULL();
-    
-    range_input = PG_GETARG_RANGE_P(0);
-    mult_input = PG_GETARG_RANGE_P(1);
-    typcacheRange = lookup_type_cache(range_input->rangetypid, TYPECACHE_RANGE_INFO);
-    typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-
-    // hardcoded //FIXME
-    neutral_element = INT_MIN;
-
-    range = deserialize_RangeType(range_input, typcacheRange);
-    mult = deserialize_RangeType(mult_input, typcacheMult);
-
-    result = range_mult_combine_helper(range, mult, neutral_element);
-    output = serialize_RangeType(result, typcacheRange);
-
-    PG_RETURN_RANGE_P(output);
+    COMBINE_RANGE_MULT_MINMAX_BODY();
 }
 
 /*
@@ -1488,50 +1468,6 @@ combine_set_mult_min(PG_FUNCTION_ARGS)
 
     PG_RETURN_ARRAYTYPE_P(output);
 }
-
-/*
-// To be called inside a MAX aggregation call. This multiplies the Set and multiplicity together.
-// neutral_element is the only difference between min/max implementation. This value is HARDCODED as either intmax/intmin //FIXME
-// Parameter: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MAX()
-*/
-// Datum
-// combine_set_mult_max(PG_FUNCTION_ARGS) 
-// {
-//     // inputs/ outputs
-//     ArrayType *set_input, *output;
-//     RangeType *mult_input;
-    
-//     // working type
-//     Int4Range mult;
-//     Int4RangeSet set1, result;
-
-//     int neutral_element;
-//     TypeCacheEntry *typcacheSet, *typcacheMult;
-    
-//     HANDLE_EITHER_ARG_ISNULL();
-    
-//     set_input = PG_GETARG_ARRAYTYPE_P(0);
-//     mult_input = PG_GETARG_RANGE_P(1);
-
-//     typcacheSet = lookup_type_cache(set_input->elemtype, TYPECACHE_RANGE_INFO);
-//     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-
-//     // hardcoded //FIXME
-//     neutral_element = INT_MIN;
-
-//     // deserialize, operate on, serialize, return
-//     set1 = deserialize_ArrayType(set_input, typcacheSet);
-//     mult = deserialize_RangeType(mult_input, typcacheMult);
-
-//     // result = set_mult_combine_helper(set1, mult, neutral_element);
-//     result = set1;  // do not need to comine mult and val bc min/max idempotent
-//     output = serialize_ArrayType(result, typcacheSet);
-//     pfree(set1.ranges);
-//     pfree(result.ranges);
-
-//     PG_RETURN_ARRAYTYPE_P(output);
-// }
 
 Datum
 combine_set_mult_max(PG_FUNCTION_ARGS) 
@@ -1876,7 +1812,7 @@ agg_max_set_transfunc(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
-// Simply just normalizes the result. Compressing any ranges if possible
+// finalfunc simply just normalizes the result. compresses any ranges if possible (remove redundancy)
 Datum 
 agg_min_max_set_finalfunc(PG_FUNCTION_ARGS)
 {

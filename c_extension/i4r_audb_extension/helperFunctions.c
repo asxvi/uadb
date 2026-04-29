@@ -512,70 +512,6 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   return filteredVals;
 }
 
-// combines every range in Set with every integer value in mult. (Sn x Mn) operation
-Int4RangeSet
-internal_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
-    Int4RangeSet result;
-    int total_result_ranges;
-    int i;
-    int j;
-    int idx;
-    Int4Range stack[1];   // create array size 1 on stack
-    Int4RangeSet multSet;
-    Int4RangeSet tempResult;
-    Int4RangeSet normOutput;
-
-    if (set1.count == 0) {
-      return empty_set();  
-    }
-
-    if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull) {
-      return empty_set();
-    }
-
-    total_result_ranges = set1.count * (mult.upper - mult.lower);
-    result.count = 0;
-    result.containsNull = false;
-    result.ranges = palloc(sizeof(Int4Range) * total_result_ranges);
-    
-    multSet.count = 1;
-    multSet.ranges = stack;
-    multSet.containsNull = false;
-
-    idx = 0;
-    // traverse thru every set/mult combination and union result
-    for (i = mult.lower; i < mult.upper; i++) {
-      // ignore mult == 0 bc it produced NULL flag
-      if (i == 0) continue;
-      
-      // temp lifted mult x -> [x, x+1)
-      multSet.ranges[0].lower = i;
-      multSet.ranges[0].upper = i+1;
-      multSet.ranges[0].isNull = false;
-    
-      // combine
-      tempResult = range_set_multiply_internal(set1, multSet);
-
-      // union in new results
-      for (j = 0; j < tempResult.count; j++) {
-        if (idx >= total_result_ranges) {
-          elog(ERROR, "internal_agg_combine_set_mult: Internal error: exceeded pre-allocated range set size");
-        }
-        result.ranges[idx] = tempResult.ranges[j];
-        idx++;
-      }
-      pfree(tempResult.ranges);
-
-    }
-    result.count = idx;
-
-    // normalize before returning
-    normOutput = normalize(result);
-    pfree(result.ranges);
-    
-    return normOutput;
-}
-
 // linear scan through vals and accumulate coverage volume
 long totalSpan(Int4RangeSet vals)
 {
@@ -796,4 +732,122 @@ Int4RangeSet range_set_multiply_scalar(Int4RangeSet set1, int32 scalar) {
         result.ranges[i].isNull = set1.ranges[i].isNull;
     }
     return result;
+}
+
+
+
+
+////////////////////////
+/// combine helpers
+////////////////////////
+
+/*
+combines every range in Set with every integer value in mult. (Sn x Mn) operation.
+same for set and range because range combine can result in a set worst case. Not true for min/max
+*/ 
+Int4RangeSet
+internal_agg_sum_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
+    Int4RangeSet result;
+    int total_result_ranges;
+    int i;
+    int j;
+    int idx;
+    Int4Range stack[1];   // create array size 1 on stack
+    Int4RangeSet multSet;
+    Int4RangeSet tempResult;
+    Int4RangeSet normOutput;
+
+    if (set1.count == 0) {
+      return empty_set();  
+    }
+
+    if (mult.upper <= mult.lower || mult.lower < 0 || mult.upper < 0 || mult.isNull) {
+      return empty_set();
+    }
+
+    total_result_ranges = set1.count * (mult.upper - mult.lower);
+    result.count = 0;
+    result.containsNull = false;
+    result.ranges = palloc(sizeof(Int4Range) * total_result_ranges);
+    
+    multSet.count = 1;
+    multSet.ranges = stack;
+    multSet.containsNull = false;
+
+    idx = 0;
+    // traverse thru every set/mult combination and union result
+    for (i = mult.lower; i < mult.upper; i++) {
+      // ignore mult == 0 bc it produced NULL flag
+      if (i == 0) continue;
+      
+      // temp lifted mult x -> [x, x+1)
+      multSet.ranges[0].lower = i;
+      multSet.ranges[0].upper = i+1;
+      multSet.ranges[0].isNull = false;
+    
+      // combine
+      tempResult = range_set_multiply_internal(set1, multSet);
+
+      // union in new results
+      for (j = 0; j < tempResult.count; j++) {
+        if (idx >= total_result_ranges) {
+          elog(ERROR, "internal_agg_sum_combine_set_mult: Internal error: exceeded pre-allocated range set size");
+        }
+        result.ranges[idx] = tempResult.ranges[j];
+        idx++;
+      }
+      pfree(tempResult.ranges);
+
+    }
+    result.count = idx;
+
+    // normalize before returning
+    normOutput = normalize(result);
+    pfree(result.ranges);
+    
+    return normOutput;
+}
+
+// returns range if mult.lb > 0. otherwise return neutral element and a NULL range
+Int4Range internal_agg_min_max_combine_range_mult(Int4Range range, Int4Range mult, int64 neutral_elem) {
+  Int4Range result;
+  result = range;
+
+  // invalid cases
+  if (mult.isNull || mult.upper <= mult.lower || mult.lower < 0) {
+    result.lower = neutral_elem;
+    result.upper = neutral_elem;
+    result.isNull = true;
+    return result;
+  }
+  
+  // mult is only zero. nothing should contribute
+  if (mult.lower == 0 && mult.upper == 1) {
+    result.lower = neutral_elem;
+    result.upper = neutral_elem;
+    result.isNull = true;
+    return result;
+  }
+  
+  // otherwise the mult = [0, n), with n > 1 so we return initial input
+  return range;
+}
+
+// returns range if mult.lb > 0. otherwise return NULL which represents neutral element (i think)
+Int4Range internal_agg_min_max_combine_range_mult2(Int4Range range, Int4Range mult) {
+  Int4Range neutral;
+  neutral.lower  = 0;
+  neutral.upper  = 0;
+  neutral.isNull = true;   // caller must PG_RETURN_NULL() on this 
+
+  // invalid or empty mult 
+  if (mult.isNull || mult.upper <= mult.lower || mult.lower < 0)
+      return neutral;
+
+  // [0,1) mult == exactly zero
+  if (mult.lower == 0 && mult.upper == 1)
+      return neutral;
+
+  // otherwise contribute
+  return range;
 }
