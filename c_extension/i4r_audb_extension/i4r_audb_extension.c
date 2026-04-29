@@ -87,10 +87,10 @@ PG_FUNCTION_INFO_V1(agg_min_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_max_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_min_max_set_finalfunc);         // shared final function
 
-//          count -- assumes mult is RangeType.. easy fix if not
+//          count
 PG_FUNCTION_INFO_V1(agg_count_transfunc);
 
-//          avg- uses agg_sum_set_transfunc as transition function
+//          avg == sum/count
 PG_FUNCTION_INFO_V1(agg_avg_range_transfunc);
 PG_FUNCTION_INFO_V1(agg_avg_range_finalfunc);
 PG_FUNCTION_INFO_V1(agg_avg_set_transfunc);
@@ -333,8 +333,10 @@ Datum func_name(PG_FUNCTION_ARGS)                                       \
     ((typcache)->typlen == 4 ? (int64)DatumGetInt32(datum) : DatumGetInt64(datum))  \
 }
 
-/* template for combining RANGE with mult. Special case on mult=[0,0]. 
+/*
+* template for combining RANGE with mult. Special case on mult=[0,0]. 
 * More detail in respective calls and internal_agg_min_max_combine_range_mult func
+* NOTE- might need to use separate sentinel value other than isNULL aka isNeutral
 */
 #define COMBINE_RANGE_MULT_MINMAX_BODY()                                        \
 do {                                                                            \
@@ -360,6 +362,7 @@ do {                                                                            
 
 /* template for combining SET with mult. Special case on mult=[0,0]. 
 * More detail in respective calls and internal_agg_min_max_combine_range_mult func
+* NOTE- might need to use separate sentinel value other than isNULL aka isNeutral
 */
 #define COMBINE_SET_MULT_MINMAX_BODY()                                          \
 do {                                                                            \
@@ -386,6 +389,50 @@ do {                                                                            
     output = serialize_ArrayType(result, typcache);                             \
     PG_RETURN_ARRAYTYPE_P(output);                                              \
 } while(0)
+
+/*
+ * State Transition function for min/max aggregate over a single range.
+ * Simply deserializes data, operates on it, and serializes.
+ *   - State = Int4Range = [a,b)
+ *   - Input = Int4Range = [c,d)
+ *   - Return RangeType: [combine_fn(a,c), combine_fn(b,d))
+ */
+#define DEFINE_AGG_MINMAX_RANGE_TRANSFUNC(func_name, combine_fn)        \
+Datum func_name(PG_FUNCTION_ARGS)                                       \
+{                                                                       \
+    Int4Range state_i4r, input_i4r, result_i4r;                         \
+    RangeType *state, *input, *result;                                  \
+    TypeCacheEntry *typcache;                                           \
+                                                                        \
+    /* first call: use the first input as initial state, or non null*/  \
+    if (PG_ARGISNULL(0)) {                                              \
+        if (PG_ARGISNULL(1)) PG_RETURN_NULL();                         \
+        /*othrwise value becomes the state*/                            \
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));                       \
+    }                                                                   \
+    /*NULL input: return current state unchanged*/                      \
+    if (PG_ARGISNULL(1))                                                \
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));                       \
+                                                                        \
+    /*compare existing min/state to the current input*/                 \
+    state = PG_GETARG_RANGE_P(0);                                       \
+    input = PG_GETARG_RANGE_P(1);                                       \
+                                                                        \
+    /*return non empty*/                                                \
+    if (RangeIsEmpty(state)) PG_RETURN_RANGE_P(input);                 \
+    if (RangeIsEmpty(input)) PG_RETURN_RANGE_P(state);                 \
+                                                                        \
+    typcache   = lookup_type_cache(state->rangetypid, TYPECACHE_RANGE_INFO); \
+                                                                        \
+    /* deserialize, compare, serialize, return */                      \
+    state_i4r  = deserialize_RangeType(state, typcache);               \
+    input_i4r  = deserialize_RangeType(input, typcache);               \
+    result_i4r = combine_fn(state_i4r, input_i4r);                     \
+    result     = serialize_RangeType(result_i4r, typcache);            \
+    PG_RETURN_RANGE_P(result);                                          \
+}
+
+
 
 /*Function declarations*/
 int logical_range_helper(RangeType *input1, RangeType *input2, int (*callback)(Int4Range, Int4Range) );
@@ -602,7 +649,7 @@ lift_range(PG_FUNCTION_ARGS)
 // Reduce to num_ranges specified in PG_ARG(1).
 Datum
 set_reduce_size(PG_FUNCTION_ARGS)
-// FIXME- fix the local code for this. need to account for NULL. should be simple fix
+// FIXME- might nede to fix the local code for this. need to account for NULL. should be simple fix
 {
     ArrayType *inputArray;
     int32 numRangesKeep;
@@ -1430,29 +1477,23 @@ agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
 ////////////////////////////////////////////////////////////////////////////////////
 
 /*
-// To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
-// Returns: a RangeType Datum as argument to MIN() or MAX()
+* To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
+* Returns: a RangeType Datum as argument to MIN() or MAX()
 */
-Datum
-combine_range_mult_min(PG_FUNCTION_ARGS) 
-{
-    COMBINE_RANGE_MULT_MINMAX_BODY();
-}
+Datum combine_range_mult_min(PG_FUNCTION_ARGS) { COMBINE_RANGE_MULT_MINMAX_BODY(); }
+DEFINE_AGG_MINMAX_RANGE_TRANSFUNC(agg_min_range_transfunc, min_range)
 
 /*
-// To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
-// Returns: a RangeType Datum as argument to MIN() or MAX()
+* To be called inside a MIN/MAX RANGE aggregation call. If mult is [0,0], then we return NULL range == neutral value (i think)
+* Returns: a RangeType Datum as argument to MIN() or MAX()
 */
-Datum
-combine_range_mult_max(PG_FUNCTION_ARGS) 
-{
-    COMBINE_RANGE_MULT_MINMAX_BODY();
-}
+Datum combine_range_mult_max(PG_FUNCTION_ARGS) { COMBINE_RANGE_MULT_MINMAX_BODY(); }
+DEFINE_AGG_MINMAX_RANGE_TRANSFUNC(agg_max_range_transfunc, max_range)
 
 /*
-// To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
-// Args: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MIN() or MAX()
+* To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
+* Args: ArrayType (data col), RangeType (multiplicity)
+* Returns: a ArrayType Datum as argument to MIN() or MAX()
 */
 Datum
 combine_set_mult_min(PG_FUNCTION_ARGS) 
@@ -1461,204 +1502,17 @@ combine_set_mult_min(PG_FUNCTION_ARGS)
 }
 
 /*
-// To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
-// Args: ArrayType (data col), RangeType (multiplicity)
-// Returns: a ArrayType Datum as argument to MIN() or MAX()
+* To be called inside a MIN/MAX SET aggregation call. This multiplies the Set and multiplicity together.
+* Args: ArrayType (data col), RangeType (multiplicity)
+* Returns: a ArrayType Datum as argument to MIN() or MAX()
 */
 Datum
 combine_set_mult_max(PG_FUNCTION_ARGS) 
 {
     COMBINE_SET_MULT_MINMAX_BODY();
 }
-// Datum
-// combine_set_mult_min(PG_FUNCTION_ARGS) 
-// {
-//     ArrayType *set_input;
-//     RangeType *mult_input;
 
-//     Int4RangeSet set1;
-//     ArrayType *output;
-
-//     TypeCacheEntry *typcacheSet;
-
-//     HANDLE_EITHER_ARG_ISNULL();
-
-//     set_input  = PG_GETARG_ARRAYTYPE_P(0);
-//     mult_input = PG_GETARG_RANGE_P(1);
-
-//     // ignore invalid multiplicity
-//     if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-//         PG_RETURN_NULL();
-
-//     if (RangeIsEmpty(mult_input))
-//         PG_RETURN_NULL();
-
-//     typcacheSet = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
-
-//     set1 = deserialize_ArrayType(set_input, typcacheSet);
-
-//     // empty set contributes nothing
-//     if (set1.count == 0) {
-//         pfree(set1.ranges);
-//         PG_RETURN_NULL();
-//     }
-
-//     // identity behavior, function returns initial set input
-//     output = serialize_ArrayType(set1, typcacheSet);
-
-//     pfree(set1.ranges);
-
-//     PG_RETURN_ARRAYTYPE_P(output);
-// }
-
-// Datum
-// combine_set_mult_max(PG_FUNCTION_ARGS) 
-// {
-//     ArrayType *set_input;
-//     RangeType *mult_input;
-//     ArrayType *output;
-
-//     Int4Range mult;
-//     Int4RangeSet set1;
-
-//     TypeCacheEntry *typcacheSet, *typcacheMult;
-
-//     HANDLE_EITHER_ARG_ISNULL();
-
-//     set_input  = PG_GETARG_ARRAYTYPE_P(0);
-//     mult_input = PG_GETARG_RANGE_P(1);
-
-//     if (RangeIsEmpty(mult_input)) {
-//         PG_RETURN_NULL();
-//     }
-
-//     typcacheSet  = lookup_type_cache(ARR_ELEMTYPE(set_input), TYPECACHE_RANGE_INFO);
-//     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-
-//     mult = deserialize_RangeType(mult_input, typcacheMult);
-
-//     if (mult.lower == 0) {
-//         PG_RETURN_NULL();
-//     }
-
-//     set1 = deserialize_ArrayType(set_input, typcacheSet);
-
-//     if (set1.count == 0) {
-//         pfree(set1.ranges);
-//         PG_RETURN_NULL();
-//     }
-
-//     output = serialize_ArrayType(set1, typcacheSet);
-
-//     pfree(set1.ranges);
-
-//     PG_RETURN_ARRAYTYPE_P(output);
-// }
-
-/*
-State Transition function for max aggregate
-Returns the minimum LB and UB of all ranges in column.
-Simply deserializes data, operates on it, and serializes 
-    State = Int4Range = [a,b)
-    Input = Int4Range = [c,d)
-    Return RangeType: [min(a,c), min(b,d))
-*/
-Datum
-agg_min_range_transfunc(PG_FUNCTION_ARGS)
-{
-    Int4Range state_i4r, input_i4r, result_i4r;
-    RangeType *state, *input, *result;
-    TypeCacheEntry *typcache;
-
-    // first call: use the first input as initial state, or non null
-    if (PG_ARGISNULL(0)) {
-        if (PG_ARGISNULL(1)) {
-            PG_RETURN_NULL();
-        }
-        // othrwise value becomes the state
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));
-    }
-    
-    // NULL input: return current state unchanged
-    if (PG_ARGISNULL(1)) {
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
-    }
-
-    // compare existing min/state to the current input
-    state = PG_GETARG_RANGE_P(0);
-    input = PG_GETARG_RANGE_P(1);
-
-    // return non empty
-    if (RangeIsEmpty(state)) {
-        PG_RETURN_POINTER(input);
-    }
-    if (RangeIsEmpty(input)) {
-        PG_RETURN_POINTER(state);
-    }
-    
-    typcache = lookup_type_cache(state->rangetypid, TYPECACHE_RANGE_INFO);
-    
-    // deserialize, compare, serialize, return
-    state_i4r = deserialize_RangeType(state, typcache);
-    input_i4r = deserialize_RangeType(input, typcache);
-    result_i4r = min_range(state_i4r, input_i4r);
-    result = serialize_RangeType(result_i4r, typcache);
-
-    PG_RETURN_POINTER(result);
-}
-
-/*
-State Transition function for max aggregate
-Returns the maximum LB and UB of all ranges in column.
-Simply deserializes data, operates on it, and serializes 
-    State = Int4Range = [a,b)
-    Input = Int4Range = [c,d)
-    Return RangeType: [max(a,c), max(b,d))
-*/
-Datum
-agg_max_range_transfunc(PG_FUNCTION_ARGS)
-{
-    Int4Range state_i4r, input_i4r, result_i4r;
-    RangeType *state, *input, *result;
-    TypeCacheEntry *typcache;
-
-    // first call: use the first input as initial state, or non null
-    if (PG_ARGISNULL(0)) {
-        if (PG_ARGISNULL(1)) {
-            PG_RETURN_NULL();
-        }
-
-        // othrwise value becomes the state
-        PG_RETURN_POINTER(PG_GETARG_RANGE_P(1));
-    }
-    // NULL input: return current state unchanged
-    if (PG_ARGISNULL(1)) {
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
-    }
-    
-    state = PG_GETARG_RANGE_P(0);
-    input = PG_GETARG_RANGE_P(1);
-    
-    // return non empty
-    if (RangeIsEmpty(state)) {
-        PG_RETURN_POINTER(input);
-    }
-    if (RangeIsEmpty(input)) {
-        PG_RETURN_POINTER(state);
-    }
-    
-    typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
-    
-    // deserialize, compare, serialize, return
-    state_i4r = deserialize_RangeType(state, typcache);
-    input_i4r = deserialize_RangeType(input, typcache);
-    result_i4r = max_range(state_i4r, input_i4r);
-    result = serialize_RangeType(result_i4r, typcache);
-
-    PG_RETURN_POINTER(result);
-}
-
-/*
+/* NOT USED, RIGHT NOW,WE USE THE MACRO VERSION 
 // Returns naturalElement Range if multiplicity is 0, otherwise original range. 
 // naturalElement Range does not affect min/max calculation
 */
@@ -1871,8 +1725,14 @@ agg_min_max_set_finalfunc(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(output);
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////
+//////// COUNT /////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
 /*
-    Only necessary for multiplicty. Takes in mult as param and counts the total number of possible ranges
+ * only necessary for multiplicty (RangeType). Takes in mult as param and counts the total number of possible ranges
+ * basically just takes sum of multiplicity col
 */
 Datum
 agg_count_transfunc(PG_FUNCTION_ARGS)
@@ -1903,6 +1763,10 @@ agg_count_transfunc(PG_FUNCTION_ARGS)
 
     PG_RETURN_ARRAYTYPE_P(result);
 }
+
+////////////////////////////////////////////////////////////////////////////////////
+//////// AVG ///////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
 
 Datum 
 agg_avg_range_transfunc(PG_FUNCTION_ARGS)
