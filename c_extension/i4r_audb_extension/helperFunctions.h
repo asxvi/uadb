@@ -1,6 +1,7 @@
 #ifndef HELPER_FUNCTION_H
 #define HELPER_FUNCTION_H
 
+#include <postgres.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -50,23 +51,25 @@ typedef struct {
     Int4RangeSet ranges;
     int resizeTrigger;
     int sizeLimit;
+    Oid elemTypeOID;
 } SumAggState;
 
 typedef struct {
     Int4RangeSet ranges;
     int resizeTrigger;
     int sizeLimit;
-    bool callNormalize;
+    Oid elemTypeOID;
     
-    long reduceCalls;               //how many times reduceSize() fired
-    long maxIntervalCount;          //peak number of intervals seen
-    long totalIntervalCount;        //sum of counts across all agg
-    long combineCalls;              //number of times merged new input
+    long reduceCalls;                   //how many times reduceSize() fired
+    long maxIntervalCount;              //peak number of intervals seen
+    long totalIntervalCount;            //sum of counts across all agg
+    long combineCalls;                  //number of times merged new input
+    
+    long minEffectiveIntervalCount;     //smallest number of intervals after reduction
+    long convergedToTotSize;            //the min size of the fully converged result
+    bool callNormalize;
 
-    long minEffectiveIntervalCount; // smallest number of intervals after reduction
-    long convergedToTotSize;             //the min size of the fully converged result
-
-} SumAggStateTest;
+} SumAggStateMetrics;
 
 typedef struct {
     Int4Range sum;
@@ -77,6 +80,13 @@ typedef struct {
     Int4RangeSet sum;
     Int4Range count;
 } sAvgAggState;
+
+// used for findign neutral element based on operation we are doing
+typedef enum {
+    MONOID_SUM,
+    MONOID_MIN,
+    MONOID_MAX
+} MonoidOp;
 
 // add extra utilites for working with defined type
 void printRange(Int4Range a);

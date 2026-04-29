@@ -69,27 +69,23 @@ PG_FUNCTION_INFO_V1(prune_set_or);
 /*(Aggregate Functions)*/
 //          sum
 PG_FUNCTION_INFO_V1(combine_range_mult_sum);
-PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);       // not used anymore bc combine_range_mult_sum returns i4r[]
-
 PG_FUNCTION_INFO_V1(combine_set_mult_sum);
+PG_FUNCTION_INFO_V1(agg_sum_range_transfunc);           // not used anymore bc combine_range_mult_sum returns i4r[]
 PG_FUNCTION_INFO_V1(agg_sum_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc);
-
-PG_FUNCTION_INFO_V1(agg_sum_set_transfunc_metrics);
-PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc_metrics);
+PG_FUNCTION_INFO_V1(agg_sum_set_transfunc_metrics);     // stores extra information/metrics for internal testing.
+PG_FUNCTION_INFO_V1(agg_sum_set_finalfunc_metrics);     // ^^
 
 //          min/max
 PG_FUNCTION_INFO_V1(combine_range_mult_min);
 PG_FUNCTION_INFO_V1(combine_range_mult_max);
-PG_FUNCTION_INFO_V1(agg_min_range_transfunc);
-PG_FUNCTION_INFO_V1(agg_max_range_transfunc);
-
 PG_FUNCTION_INFO_V1(combine_set_mult_min);
 PG_FUNCTION_INFO_V1(combine_set_mult_max);
-
+PG_FUNCTION_INFO_V1(agg_min_range_transfunc);
+PG_FUNCTION_INFO_V1(agg_max_range_transfunc);
 PG_FUNCTION_INFO_V1(agg_min_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_max_set_transfunc);
-PG_FUNCTION_INFO_V1(agg_min_max_set_finalfunc);
+PG_FUNCTION_INFO_V1(agg_min_max_set_finalfunc);         // shared final function
 
 //          count -- assumes mult is RangeType.. easy fix if not
 PG_FUNCTION_INFO_V1(agg_count_transfunc);
@@ -105,7 +101,9 @@ PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
 #define PRIMARY_DATA_TYPE "int4range"
 
 
-/*(Defined MACROS)*/
+///////////////////////////////////////////////////////////////
+ //   MACROS
+///////////////////////////////////////////////////////////////
 
 /// check for NULLS parameters. Different from empty range check
 //  returns the parameter that is not null
@@ -340,9 +338,12 @@ ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4Range
 Int4Range range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement);
 Int4RangeSet set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement);
 
-/////////////////////
-    // Arithmetic
-/////////////////////
+Datum get_neutral_element(Oid elementOID, MonoidOp op);
+
+///////////////////////////////////////////////////////////////
+ //   ARITHMETIC
+///////////////////////////////////////////////////////////////
+
 DEFINE_RANGE_ARITHMETIC_FUNC(range_add, range_add_internal)
 DEFINE_RANGE_ARITHMETIC_FUNC(range_subtract, range_subtract_internal)
 DEFINE_RANGE_ARITHMETIC_FUNC(range_multiply, range_multiply_internal)
@@ -353,9 +354,10 @@ DEFINE_SET_ARITHMETIC_FUNC(set_subtract, range_set_subtract_internal)
 DEFINE_SET_ARITHMETIC_FUNC(set_multiply, range_set_multiply_internal)
 DEFINE_SET_ARITHMETIC_FUNC(set_divide, range_set_divide_internal)
 
-/////////////////////
-    // Comparison
-/////////////////////
+///////////////////////////////////////////////////////////////
+ //   COMPARISON
+///////////////////////////////////////////////////////////////
+
 DEFINE_RANGE_LOGICAL_FUNC(range_gt, range_greater_than)
 DEFINE_RANGE_LOGICAL_FUNC(range_gte, range_greater_than_equal)
 DEFINE_RANGE_LOGICAL_FUNC(range_lt, range_less_than)
@@ -368,9 +370,10 @@ DEFINE_SET_LOGICAL_FUNC(set_lt, set_less_than)
 DEFINE_SET_LOGICAL_FUNC(set_lte, set_less_than_equal)
 DEFINE_SET_LOGICAL_FUNC(set_eq, set_equal_internal)
 
-/////////////////////
- // Prune Functions
-/////////////////////
+///////////////////////////////////////////////////////////////
+ //   PRUNE FUNCTIONS
+///////////////////////////////////////////////////////////////
+
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_lt, prune_lt_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_gt, prune_gt_internal_range)
 DEFINE_PRUNE_RANGE_FUNC_COMPARISON(prune_range_lte, prune_lte_internal_range)
@@ -387,9 +390,9 @@ DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_eq, prune_eq_set_internal)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_and, prune_AND_internal_set)
 DEFINE_PRUNE_SET_FUNC_LOGICAL(prune_set_or, prune_OR_internal_set)
 
-/////////////////////
- // Helper Functions
-/////////////////////
+///////////////////////////////////////////////////////////////
+ //   HELPER FUNCTIONS
+///////////////////////////////////////////////////////////////
 
 // find total num ranges in set
 Datum 
@@ -614,6 +617,37 @@ set_normalize(PG_FUNCTION_ARGS)
 }
 
 /*
+    extendable convenience helper for creating neutral elements based on working data type.
+    neutral element naturally differs for sum, min, max and is called in each combine_* helper
+*/
+Datum 
+get_neutral_element(Oid elementOID, MonoidOp op) 
+{
+    switch (elementOID) {
+        case INT4RANGEOID:
+            switch (op) {
+                case MONOID_SUM: return Int32GetDatum(0);
+                case MONOID_MIN: return Int32GetDatum(INT_MAX);
+                case MONOID_MAX: return Int32GetDatum(INT_MIN);
+            }
+            break;
+        
+        case INT8RANGEOID:
+            switch (op) {
+                case MONOID_SUM: return Int64GetDatum(0);
+                case MONOID_MIN: return Int64GetDatum(PG_INT64_MAX);
+                case MONOID_MAX: return Int64GetDatum(PG_INT64_MIN);
+            }
+            break;
+        
+        default:
+            elog(ERROR, "Neutral element not implemented for OID %u", elementOID);
+    }
+
+    return (Datum)(0);  // impossible
+}
+
+/*
 Takes in 2 parameters: Array: Int4RangeSet, and the function ptr callback: Int4RangeSet function() 
 Generally called for helper functions that modify 1 Int4RangeSet param passed in
 
@@ -825,10 +859,13 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
     return result;
 }
 
-/////////////////////
+///////////////////////////////////////////////////////////////
  //   AGGREGATES
-/////////////////////
+///////////////////////////////////////////////////////////////
 
+///////////////////////
+ // SUM 
+///////////////////////
 /*
 // To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
 // Parameter: ArrayType (data col), RangeType (multiplicity)
@@ -869,12 +906,6 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     // deserialize, operate on, serialize, return
     input_i4r = deserialize_RangeType(input, typcache);
     mult_i4r = deserialize_RangeType(mult_input, typcacheMult);
-    
-    // // check for mult LB = 0
-    // if (mult_i4r.lower == 0){;
-    //     PG_RETURN_NULL();
-    // }
-
     lifted = lift_range_local(input_i4r);
 
     // normalizes before return
@@ -925,8 +956,6 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     set1 = deserialize_ArrayType(set_input, typcacheSet);
     mult = deserialize_RangeType(mult_input, typcacheMult);
 
-    // printRangeSetElog(set1);
-
     // handle {empty} case != {} != NULL 
     if (set1.count == 0) {
         PG_RETURN_NULL();
@@ -941,6 +970,51 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     pfree(result.ranges);
 
     PG_RETURN_ARRAYTYPE_P(output);
+}
+
+/*
+*   transition function for sum(combine_range_mult_sum(data, mult), resizetrigger, sizelimit)
+*   
+* Parameters [4]:
+*   - RangeType: existing state
+*   - RangeType: current state (result of combine_range_mult_sum(data, mult))
+*   - Integer: resize trigger
+*   - Integer: size limit
+*   
+* Returns [1]:
+*   - Datum (pointer to RangeType result) 
+*
+* NOTE- dont think we even need reduce params here bc results always size 1 since its ranges. perhaps keep for standardization btwn set/range??
+*/
+Datum
+agg_sum_range_transfunc(PG_FUNCTION_ARGS)
+{
+    RangeType *state;
+    RangeType *input;
+    RangeType *result;
+    
+    // first call: use the first input as initial state, or non null
+    if (PG_ARGISNULL(0)){
+        if (PG_ARGISNULL(1)){
+            PG_RETURN_NULL();
+        }
+        // othrwise value becomes the state
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));
+    }
+
+    // not first call, we do aggregate...
+    // case- NULL input: return current state unchanged
+    if(PG_ARGISNULL(1)) {
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
+    }
+    
+    // otherwise, get arguments, call helper to get result, check to normalize after
+    state = PG_GETARG_RANGE_P(0);
+    input = PG_GETARG_RANGE_P(1);
+
+    result = arithmetic_range_helper(state, input, range_add_internal);
+
+    PG_RETURN_RANGE_P(result);
 }
 
 /*
@@ -970,30 +1044,31 @@ agg_sum_set_transfunc(PG_FUNCTION_ARGS)
     
     // first call, state is NULL
     if (PG_ARGISNULL(0)) {
-
         // check for NULL input param, or empty
         if (PG_ARGISNULL(1)) {
             PG_RETURN_NULL();
         }
         
         currSet = PG_GETARG_ARRAYTYPE_P(1);
-        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
         
         // empty set, continue on until non empty
         if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
             PG_RETURN_NULL();
         }
-
+        
         // switch to aggregate memory context for persistent allocations
         oldcontext = MemoryContextSwitchTo(aggcontext);
         
+        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
         // internal state init
         state = (SumAggState *) palloc0(sizeof(SumAggState));
         state->ranges = deserialize_ArrayType(currSet, typcache);
+        // set only once on first call
         state->resizeTrigger = PG_GETARG_INT32(2);
         state->sizeLimit = PG_GETARG_INT32(3);
+        state->elemTypeOID = ARR_ELEMTYPE(currSet);
         
-        // need to return to callers context
+        // return to callers context
         MemoryContextSwitchTo(oldcontext);
         
         PG_RETURN_POINTER(state);
@@ -1014,7 +1089,7 @@ agg_sum_set_transfunc(PG_FUNCTION_ARGS)
         // deserialize input in current context (freed later)
         inputSet = deserialize_ArrayType(currSet, typcache);
         
-        // agg context persists data
+        // agg context persists mem
         oldcontext = MemoryContextSwitchTo(aggcontext);
         combined = range_set_add_internal(state->ranges, inputSet);
         
@@ -1043,7 +1118,7 @@ agg_sum_set_transfunc(PG_FUNCTION_ARGS)
 }
 
 /*
-    Reduce one last time if needed and Convert Internal type to ArrayType Datum.
+    Reduce one last time if needed and Convert Internal type(SumAggState) to ArrayType Datum.
 */
 Datum
 agg_sum_set_finalfunc(PG_FUNCTION_ARGS)
@@ -1059,8 +1134,8 @@ agg_sum_set_finalfunc(PG_FUNCTION_ARGS)
     }
     
     state = (SumAggState*) PG_GETARG_POINTER(0);
-    
-    elemTypeOID = TypenameGetTypid("int4range");
+
+    elemTypeOID = state->elemTypeOID;
     typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
 
     // empty state
@@ -1087,211 +1162,216 @@ agg_sum_set_finalfunc(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
-// agg over empty == 0,0
-/* arbitrary trigger size. doesnt use for now 
-    first parameter is the state
-    second parameter is the current val (I4RSet)
-    third parameter is the multiplicity
- */
-Datum
-agg_sum_range_transfunc(PG_FUNCTION_ARGS)
-{
-    RangeType *state;
-    RangeType *input;
-    RangeType *result;
-    
-    // first call: use the first input as initial state, or non null
-    if (PG_ARGISNULL(0)){
-        if (PG_ARGISNULL(1)){
-            PG_RETURN_NULL();
-        }
-        // othrwise value becomes the state
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));
-    }
-
-    // NULL input: return current state unchanged
-    if(PG_ARGISNULL(1)) {
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
-    }
-    
-    // get arguments, call helper to get result, check to normalize after
-    state = PG_GETARG_RANGE_P(0);
-    input = PG_GETARG_RANGE_P(1);
-
-    result = arithmetic_range_helper(state, input, range_add_internal);
-
-    PG_RETURN_RANGE_P(result);
-}
 
 /*
-State Transition function for max aggregate
-Returns the minimum LB and UB of all ranges in column.
-Simply deserializes data, operates on it, and serializes 
-    State = Int4Range = [a,b)
-    Input = Int4Range = [c,d)
-    Return RangeType: [min(a,c), min(b,d))
+* ** USED FOR INTERNAL TESTING SUITE **
+*   transition function for sum_metrics(combine_set_mult_sum(data, mult), resizetrigger, sizelimit)
+*   
+* Parameters [4]:
+*   - SumAggStateMetrics: (internal type)
+*   - ArrayType: current state (result of combine_set_mult_sum(data, mult))
+*   - Integer: resize trigger
+*   - Integer: size limit
+*   
+* Returns [1]:
+*   - Datum (pointer to SumAggStateMetrics) 
 */
 Datum
-agg_min_range_transfunc(PG_FUNCTION_ARGS)
+agg_sum_set_transfunc_metrics(PG_FUNCTION_ARGS)
 {
-    Int4Range state_i4r, input_i4r, result_i4r;
-    RangeType *state, *input, *result;
+    MemoryContext aggcontext;
+    MemoryContext oldcontext;
+    SumAggStateMetrics *state;
+    ArrayType *currSet;
     TypeCacheEntry *typcache;
-
-    // first call: use the first input as initial state, or non null
+    Int4RangeSet inputSet, combined, normalized, newState;
+    
+    if (!AggCheckCallContext(fcinfo, &aggcontext))
+        elog(ERROR, "agg_sum_set_transfunc_metrics called in non-aggregate context");
+    
+    // first call, state is NULL
     if (PG_ARGISNULL(0)) {
+
+        // check for NULL input param, or empty
         if (PG_ARGISNULL(1)) {
             PG_RETURN_NULL();
         }
-        // othrwise value becomes the state
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));
-    }
-    
-    // NULL input: return current state unchanged
-    if (PG_ARGISNULL(1)) {
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
-    }
-
-    // compare existing min/state to the current input
-    state = PG_GETARG_RANGE_P(0);
-    input = PG_GETARG_RANGE_P(1);
-
-    // return non empty
-    if (RangeIsEmpty(state)) {
-        PG_RETURN_POINTER(input);
-    }
-    if (RangeIsEmpty(input)) {
-        PG_RETURN_POINTER(state);
-    }
-    
-    typcache = lookup_type_cache(state->rangetypid, TYPECACHE_RANGE_INFO);
-    
-    // deserialize, compare, serialize, return
-    state_i4r = deserialize_RangeType(state, typcache);
-    input_i4r = deserialize_RangeType(input, typcache);
-    result_i4r = min_range(state_i4r, input_i4r);
-    result = serialize_RangeType(result_i4r, typcache);
-
-    PG_RETURN_POINTER(result);
-}
-
-/*
-State Transition function for max aggregate
-Returns the maximum LB and UB of all ranges in column.
-Simply deserializes data, operates on it, and serializes 
-    State = Int4Range = [a,b)
-    Input = Int4Range = [c,d)
-    Return RangeType: [max(a,c), max(b,d))
-*/
-Datum
-agg_max_range_transfunc(PG_FUNCTION_ARGS)
-{
-    Int4Range state_i4r, input_i4r, result_i4r;
-    RangeType *state, *input, *result;
-    TypeCacheEntry *typcache;
-
-    // first call: use the first input as initial state, or non null
-    if (PG_ARGISNULL(0)) {
-        if (PG_ARGISNULL(1)) {
+        
+        currSet = PG_GETARG_ARRAYTYPE_P(1);
+        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
+        
+        // empty set, continue on until non empty
+        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
             PG_RETURN_NULL();
         }
 
-        // othrwise value becomes the state
-        PG_RETURN_POINTER(PG_GETARG_RANGE_P(1));
-    }
-    // NULL input: return current state unchanged
-    if (PG_ARGISNULL(1)) {
-        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
-    }
-    
-    state = PG_GETARG_RANGE_P(0);
-    input = PG_GETARG_RANGE_P(1);
-    
-    // return non empty
-    if (RangeIsEmpty(state)) {
-        PG_RETURN_POINTER(input);
-    }
-    if (RangeIsEmpty(input)) {
+        // switch to aggregate memory context for persistent allocations
+        oldcontext = MemoryContextSwitchTo(aggcontext);
+        
+        // internal state init
+        state = (SumAggStateMetrics *) palloc0(sizeof(SumAggStateMetrics));
+        state->ranges = deserialize_ArrayType(currSet, typcache);
+        state->resizeTrigger = PG_GETARG_INT32(2);
+        state->sizeLimit = PG_GETARG_INT32(3);
+        state->callNormalize = PG_GETARG_BOOL(4);
+        state->elemTypeOID = ARR_ELEMTYPE(currSet);
+        
+        state->reduceCalls = 0;
+        state->combineCalls = 1;
+        state->maxIntervalCount = state->ranges.count;
+        state->totalIntervalCount = state->ranges.count;
+        state->minEffectiveIntervalCount = 0;
+        state->convergedToTotSize = 0;
+        
+        // need to return to callers context
+        MemoryContextSwitchTo(oldcontext);
+        
         PG_RETURN_POINTER(state);
     }
     
-    typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
-    
-    // deserialize, compare, serialize, return
-    state_i4r = deserialize_RangeType(state, typcache);
-    input_i4r = deserialize_RangeType(input, typcache);
-    result_i4r = max_range(state_i4r, input_i4r);
-    result = serialize_RangeType(result_i4r, typcache);
+    // otherwise merge into existing state
+    state = (SumAggStateMetrics *) PG_GETARG_POINTER(0);
 
-    PG_RETURN_POINTER(result);
-}
+    if (!PG_ARGISNULL(1)) {
+        currSet = PG_GETARG_ARRAYTYPE_P(1);
+        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
 
-/*
-// Returns naturalElement Range if multiplicity is 0, otherwise original range. 
-// naturalElement Range does not affect min/max calculation
-*/
-// FIXME will need to change the type of neutral element depending on what datatype the user is using
-Int4Range
-range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement)
-{
-    // return neutral so doesn't affect the aggregate
-    if(mult.lower == 0) {
-        Int4Range result;
-        result.isNull = true; //auto false, not using NULLs
+        // empty check
+        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
+            PG_RETURN_POINTER(state);
+        }
+        
+        // deserialize input in current context (freed later)
+        inputSet = deserialize_ArrayType(currSet, typcache);
+        
+        // agg context persists data
+        oldcontext = MemoryContextSwitchTo(aggcontext);
+        combined = range_set_add_internal(state->ranges, inputSet);
+        
+        // metadata
+        state->combineCalls++;
+        state->totalIntervalCount += combined.count;
+        if (combined.count > state->maxIntervalCount) {
+            state->maxIntervalCount = combined.count;
+        }
 
-        // have to adjust UB + 2 or LB -2 based on if pos or neg
-        if (neutralElement <= 0) {
-            result.lower = neutralElement;      //temp change to resolve crashing   
-            result.upper = neutralElement + 2;
+        // free old ranges
+        if (state->ranges.ranges != NULL) {
+            pfree(state->ranges.ranges);
+        }
+        
+        // check reduce size
+        if (combined.count >= state->resizeTrigger) {
+            newState = reduceSize(combined, state->sizeLimit);
+            pfree(combined.ranges);
+            state->reduceCalls++;
         }
         else {
-            result.lower = neutralElement-2;      //temp change to resolve crashing   
-            result.upper = neutralElement;
+            newState = combined;
+            // NOTE test normalize here and not here    // update- what???
         }
-        return result;
+
+        if (state->callNormalize) {
+            normalized = normalize(newState);
+            if (newState.ranges != combined.ranges)
+                pfree(newState.ranges);
+
+            newState = normalized;
+        }
+        state->ranges = newState;
+        
+        // free previous memory context
+        MemoryContextSwitchTo(oldcontext);        
+        pfree(inputSet.ranges);
     }
-
-    return range;
-}
-
-/*
-// Returns naturalElement Set if multiplicity is 0, otherwise original Set. 
-// naturalElement Set does not affect min/max calculation
-*/
-// FIXME will need to change the type of neutral element depending on what datatype the user is using
-Int4RangeSet
-set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement)
-{
-    Int4RangeSet result;
-    // return neutral so doesn't affect the aggregate
-    if(mult.lower == 0) {
-        result.count = 1;
-        result.containsNull = false;
-        result.ranges = palloc(sizeof(Int4Range));
-        result.ranges[0].isNull = false;
     
-        // have to adjust UB + 2 or LB -2 based on if pos or neg
-        if (neutralElement <= 0) {
-            result.ranges[0].lower = neutralElement + 1;      //temp change to resolve crashing   
-            result.ranges[0].upper = neutralElement + 10;
-        }
-        else {
-            result.ranges[0].lower = neutralElement-10;      //temp change to resolve crashing   
-            result.ranges[0].upper = neutralElement -1;
-        }
-        return result;
-    }
-
-    // caller owns deep copy result
-    result.count = set1.count;
-    result.containsNull = set1.containsNull;
-    result.ranges = palloc(sizeof(Int4Range) * set1.count);
-    memcpy(result.ranges, set1.ranges, sizeof(Int4Range) * set1.count);
-    return result;
+    PG_RETURN_POINTER(state);
 }
 
 /*
-// To be called inside a MIN aggregation call. This multiplies the range and multuplicity together.
+* ** USED FOR INTERNAL TESTING SUITE **
+    returns a composite type containing:
+    * result
+    * resize trigger
+    * resize limit
+    * number of calls to reduce
+    * peak number of intervals seen
+    * total intervals count
+    * number of times merged new input = num rows in dataset
+*/
+Datum
+agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
+{
+    SumAggStateMetrics *state;
+    Int4RangeSet normalized, reduced;
+    Datum values[9];
+    bool nulls[9] = {false,false,false,false,false,false,false,false,false};
+    HeapTuple tuple;
+    TupleDesc tupdesc;
+    ArrayType *arr;
+    Oid elemTypeOID;
+    TypeCacheEntry *typcache;
+    long currentSpan, currentCount;
+
+    if (PG_ARGISNULL(0)) {
+        PG_RETURN_NULL();
+    }
+    
+    state = (SumAggStateMetrics*) PG_GETARG_POINTER(0);
+    
+    elemTypeOID = state->elemTypeOID;
+    if (elemTypeOID == InvalidOid)
+        elog(ERROR, "OID: %d type not found in catalog", elemTypeOID);
+    typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
+
+    // always normalize on final call bc why have reducndancy in output
+    normalized = normalize(state->ranges);
+    
+    // optionally reduce further (potentially increasing cover) if the normalized result is still smaller than the users desired size limit
+    if (normalized.count >= state->resizeTrigger) {
+        reduced = reduceSize(normalized, state->sizeLimit);
+        pfree(normalized.ranges);
+        arr = serialize_ArrayType(reduced, typcache);
+        currentSpan = totalSpan(reduced);
+        currentCount = reduced.count;
+        pfree(reduced.ranges);
+    }
+    else {
+        arr = serialize_ArrayType(normalized, typcache);
+        currentSpan = totalSpan(normalized);
+        currentCount = normalized.count;
+        pfree(normalized.ranges);
+    }
+
+    // track metadata
+    state->minEffectiveIntervalCount = currentCount;
+    state->convergedToTotSize = currentSpan;
+
+    values[0] = PointerGetDatum(arr);
+    values[1] = Int64GetDatum(state->resizeTrigger);
+    values[2] = Int64GetDatum(state->sizeLimit);
+    values[3] = Int64GetDatum(state->reduceCalls);
+    values[4] = Int64GetDatum(state->maxIntervalCount);
+    values[5] = Int64GetDatum(state->totalIntervalCount);
+    values[6] = Int64GetDatum(state->combineCalls);
+    values[7] = Int64GetDatum(state->minEffectiveIntervalCount);
+    values[8] = Int64GetDatum(state->convergedToTotSize);
+
+    // get the composite tuple descriptor
+    if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+        elog(ERROR, "return type must be composite");
+    BlessTupleDesc(tupdesc);
+
+    tuple = heap_form_tuple(tupdesc, values, nulls);
+    return HeapTupleGetDatum(tuple);                        // cmoposite must be deserialzed again in python code to get specific metrics
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+//////// MIN/MAX ///////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
+/*
+// To be called inside a MIN aggregation call. This multiplies the range * (each m in mult)
 // neutral_element is the only difference between min/max implementation. This value is HARDCODED //FIXME
 // Returns: a RangeType Datum as argument to MIN()
 */
@@ -1490,6 +1570,172 @@ combine_set_mult_max(PG_FUNCTION_ARGS)
     PG_RETURN_ARRAYTYPE_P(output);
 }
 
+/*
+State Transition function for max aggregate
+Returns the minimum LB and UB of all ranges in column.
+Simply deserializes data, operates on it, and serializes 
+    State = Int4Range = [a,b)
+    Input = Int4Range = [c,d)
+    Return RangeType: [min(a,c), min(b,d))
+*/
+Datum
+agg_min_range_transfunc(PG_FUNCTION_ARGS)
+{
+    Int4Range state_i4r, input_i4r, result_i4r;
+    RangeType *state, *input, *result;
+    TypeCacheEntry *typcache;
+
+    // first call: use the first input as initial state, or non null
+    if (PG_ARGISNULL(0)) {
+        if (PG_ARGISNULL(1)) {
+            PG_RETURN_NULL();
+        }
+        // othrwise value becomes the state
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(1));
+    }
+    
+    // NULL input: return current state unchanged
+    if (PG_ARGISNULL(1)) {
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
+    }
+
+    // compare existing min/state to the current input
+    state = PG_GETARG_RANGE_P(0);
+    input = PG_GETARG_RANGE_P(1);
+
+    // return non empty
+    if (RangeIsEmpty(state)) {
+        PG_RETURN_POINTER(input);
+    }
+    if (RangeIsEmpty(input)) {
+        PG_RETURN_POINTER(state);
+    }
+    
+    typcache = lookup_type_cache(state->rangetypid, TYPECACHE_RANGE_INFO);
+    
+    // deserialize, compare, serialize, return
+    state_i4r = deserialize_RangeType(state, typcache);
+    input_i4r = deserialize_RangeType(input, typcache);
+    result_i4r = min_range(state_i4r, input_i4r);
+    result = serialize_RangeType(result_i4r, typcache);
+
+    PG_RETURN_POINTER(result);
+}
+
+/*
+State Transition function for max aggregate
+Returns the maximum LB and UB of all ranges in column.
+Simply deserializes data, operates on it, and serializes 
+    State = Int4Range = [a,b)
+    Input = Int4Range = [c,d)
+    Return RangeType: [max(a,c), max(b,d))
+*/
+Datum
+agg_max_range_transfunc(PG_FUNCTION_ARGS)
+{
+    Int4Range state_i4r, input_i4r, result_i4r;
+    RangeType *state, *input, *result;
+    TypeCacheEntry *typcache;
+
+    // first call: use the first input as initial state, or non null
+    if (PG_ARGISNULL(0)) {
+        if (PG_ARGISNULL(1)) {
+            PG_RETURN_NULL();
+        }
+
+        // othrwise value becomes the state
+        PG_RETURN_POINTER(PG_GETARG_RANGE_P(1));
+    }
+    // NULL input: return current state unchanged
+    if (PG_ARGISNULL(1)) {
+        PG_RETURN_RANGE_P(PG_GETARG_RANGE_P(0));
+    }
+    
+    state = PG_GETARG_RANGE_P(0);
+    input = PG_GETARG_RANGE_P(1);
+    
+    // return non empty
+    if (RangeIsEmpty(state)) {
+        PG_RETURN_POINTER(input);
+    }
+    if (RangeIsEmpty(input)) {
+        PG_RETURN_POINTER(state);
+    }
+    
+    typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
+    
+    // deserialize, compare, serialize, return
+    state_i4r = deserialize_RangeType(state, typcache);
+    input_i4r = deserialize_RangeType(input, typcache);
+    result_i4r = max_range(state_i4r, input_i4r);
+    result = serialize_RangeType(result_i4r, typcache);
+
+    PG_RETURN_POINTER(result);
+}
+
+/*
+// Returns naturalElement Range if multiplicity is 0, otherwise original range. 
+// naturalElement Range does not affect min/max calculation
+*/
+// FIXME will need to change the type of neutral element depending on what datatype the user is using
+Int4Range
+range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement)
+{
+    // return neutral so doesn't affect the aggregate
+    if(mult.lower == 0) {
+        Int4Range result;
+        result.isNull = true; //auto false, not using NULLs
+
+        // have to adjust UB + 2 or LB -2 based on if pos or neg
+        if (neutralElement <= 0) {
+            result.lower = neutralElement;      //temp change to resolve crashing   
+            result.upper = neutralElement + 2;
+        }
+        else {
+            result.lower = neutralElement-2;      //temp change to resolve crashing   
+            result.upper = neutralElement;
+        }
+        return result;
+    }
+
+    return range;
+}
+
+/*
+// Returns naturalElement Set if multiplicity is 0, otherwise original Set. 
+// naturalElement Set does not affect min/max calculation
+*/
+// FIXME will need to change the type of neutral element depending on what datatype the user is using
+Int4RangeSet
+set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement)
+{
+    Int4RangeSet result;
+    // return neutral so doesn't affect the aggregate
+    if(mult.lower == 0) {
+        result.count = 1;
+        result.containsNull = false;
+        result.ranges = palloc(sizeof(Int4Range));
+        result.ranges[0].isNull = false;
+    
+        // have to adjust UB + 2 or LB -2 based on if pos or neg
+        if (neutralElement <= 0) {
+            result.ranges[0].lower = neutralElement + 1;      //temp change to resolve crashing   
+            result.ranges[0].upper = neutralElement + 10;
+        }
+        else {
+            result.ranges[0].lower = neutralElement-10;      //temp change to resolve crashing   
+            result.ranges[0].upper = neutralElement -1;
+        }
+        return result;
+    }
+
+    // caller owns deep copy result
+    result.count = set1.count;
+    result.containsNull = set1.containsNull;
+    result.ranges = palloc(sizeof(Int4Range) * set1.count);
+    memcpy(result.ranges, set1.ranges, sizeof(Int4Range) * set1.count);
+    return result;
+}
 
 /*
 // State Transition function for min aggregate
@@ -1846,235 +2092,4 @@ agg_avg_set_finalfunc(PG_FUNCTION_ARGS)
     if (avg.ranges) pfree(avg.ranges);
     
     PG_RETURN_ARRAYTYPE_P(result);
-}
-
-
-
-/*
-// ** USED FOR INTERNAL TESTING SUITE
-*   transition function for sum(combine_set_mult_sum(data, mult), resizetrigger, sizelimit)
-*   
-* Parameters [4]:
-*   - SumAggStateTest: (internal type)
-*   - ArrayType: current state (result of combine_set_mult_sum(data, mult))
-*   - Integer: resize trigger
-*   - Integer: size limit
-*   
-* Returns [1]:
-*   - Datum (pointer to SumAggState) 
-*/
-Datum
-agg_sum_set_transfunc_metrics(PG_FUNCTION_ARGS)
-{
-    MemoryContext aggcontext;
-    MemoryContext oldcontext;
-    SumAggStateTest *state;
-    ArrayType *currSet;
-    TypeCacheEntry *typcache;
-    Int4RangeSet inputSet, combined, normalized, newState;
-    // long currentSpan, currentCount;
-    
-    if (!AggCheckCallContext(fcinfo, &aggcontext))
-        elog(ERROR, "agg_sum_set_transfunc called in non-aggregate context");
-    
-    // first call, state is NULL
-    if (PG_ARGISNULL(0)) {
-
-        // check for NULL input param, or empty
-        if (PG_ARGISNULL(1)) {
-            PG_RETURN_NULL();
-        }
-        
-        currSet = PG_GETARG_ARRAYTYPE_P(1);
-        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
-        
-        // empty set, continue on until non empty
-        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
-            PG_RETURN_NULL();
-        }
-
-        // switch to aggregate memory context for persistent allocations
-        oldcontext = MemoryContextSwitchTo(aggcontext);
-        
-        // internal state init
-        state = (SumAggStateTest *) palloc0(sizeof(SumAggStateTest));
-        state->ranges = deserialize_ArrayType(currSet, typcache);
-        state->resizeTrigger = PG_GETARG_INT32(2);
-        state->sizeLimit = PG_GETARG_INT32(3);
-        state->callNormalize = PG_GETARG_BOOL(4);
-        
-        state->reduceCalls = 0;
-        state->combineCalls = 1;
-        state->maxIntervalCount = state->ranges.count;
-        state->totalIntervalCount = state->ranges.count;
-        state->minEffectiveIntervalCount = 0;
-        state->convergedToTotSize = 0;
-        
-        // need to return to callers context
-        MemoryContextSwitchTo(oldcontext);
-        
-        PG_RETURN_POINTER(state);
-    }
-    
-    // otherwise merge into existing state
-    state = (SumAggStateTest *) PG_GETARG_POINTER(0);
-
-    if (!PG_ARGISNULL(1)) {
-        currSet = PG_GETARG_ARRAYTYPE_P(1);
-        typcache = lookup_type_cache(ARR_ELEMTYPE(currSet), TYPECACHE_RANGE_INFO);
-
-        // empty check
-        if (ArrayGetNItems(ARR_NDIM(currSet), ARR_DIMS(currSet)) == 0) {
-            PG_RETURN_POINTER(state);
-        }
-        
-        // deserialize input in current context (freed later)
-        inputSet = deserialize_ArrayType(currSet, typcache);
-        
-        // agg context persists data
-        oldcontext = MemoryContextSwitchTo(aggcontext);
-        combined = range_set_add_internal(state->ranges, inputSet);
-        
-        // metadata
-        state->combineCalls++;
-        state->totalIntervalCount += combined.count;
-        if (combined.count > state->maxIntervalCount) {
-            state->maxIntervalCount = combined.count;
-        }
-
-        // free old ranges
-        if (state->ranges.ranges != NULL) {
-            pfree(state->ranges.ranges);
-        }
-        
-        // check reduce size
-        if (combined.count >= state->resizeTrigger) {
-            newState = reduceSize(combined, state->sizeLimit);
-            pfree(combined.ranges);
-            state->reduceCalls++;
-        }
-        else {
-            newState = combined;
-            // NOTE test normalize here and not here
-        }
-
-        if (state->callNormalize) {
-            normalized = normalize(newState);
-            if (newState.ranges != combined.ranges)
-                pfree(newState.ranges);
-
-            newState = normalized;
-        }
-        state->ranges = newState;
-        
-        // attemp to track when collapse occurs and min width/ num ranges
-        // currentSpan  = totalSpan(newState);
-        // currentCount = newState.count;
-        
-        
-        // elog(INFO, "FINAL span = %ld, count = %ld",
-        //     currentSpan,
-        //     currentCount);
-            
-        // if (state->minEffectiveIntervalCount == 0) {
-        //     state->minEffectiveIntervalCount = currentCount;
-        //     state->convergedToTotSize = currentSpan;
-        // }
-        // else if (currentCount < state->minEffectiveIntervalCount) {
-        //     state->minEffectiveIntervalCount = currentCount;
-        //     state->convergedToTotSize = currentSpan;
-        // }
-        // else if (currentCount == state->minEffectiveIntervalCount &&
-        //         currentSpan < state->convergedToTotSize) {
-        //     state->convergedToTotSize = currentSpan;
-        // }
-
-        // elog(INFO, "FINAL span = %ld, count = %ld",
-        //     currentSpan,
-        //     currentCount);
-        
-        // free previous memory context
-        MemoryContextSwitchTo(oldcontext);        
-        pfree(inputSet.ranges);
-    }
-    
-    PG_RETURN_POINTER(state);
-    }
-
-/*
-    returns a composite type containing:
-    * result
-    * resize trigger
-    * resize limit
-    * number of calls to reduce
-    * peak number of intervals seen
-    * total intervals count
-    * number of times merged new input = num rows in dataset
-*/
-Datum
-agg_sum_set_finalfunc_metrics(PG_FUNCTION_ARGS)
-{
-    SumAggStateTest *state;
-    Int4RangeSet normalized, reduced;
-    Datum values[9];
-    bool nulls[9] = {false,false,false,false,false,false,false,false,false};
-    HeapTuple tuple;
-    TupleDesc tupdesc;
-    ArrayType *arr;
-    Oid elemTypeOID;
-    TypeCacheEntry *typcache;
-    long currentSpan, currentCount;
-
-
-    if (PG_ARGISNULL(0)) {
-        PG_RETURN_NULL();
-    }
-    
-    state = (SumAggStateTest*) PG_GETARG_POINTER(0);
-    
-    elemTypeOID = TypenameGetTypid("int4range");
-    if (elemTypeOID == InvalidOid)
-        elog(ERROR, "int4range type not found in catalog");
-    typcache = lookup_type_cache(elemTypeOID, TYPECACHE_RANGE_INFO);
-
-    // always normalize on final call
-    normalized = normalize(state->ranges);
-    
-    // optionally reduce if the normalized result is still smaller than the size limit
-    if (normalized.count >= state->resizeTrigger) {
-        reduced = reduceSize(normalized, state->sizeLimit);
-        pfree(normalized.ranges);
-        arr = serialize_ArrayType(reduced, typcache);
-        currentSpan = totalSpan(reduced);
-        currentCount = reduced.count;
-        pfree(reduced.ranges);
-    }
-    else {
-        arr = serialize_ArrayType(normalized, typcache);
-        currentSpan = totalSpan(normalized);
-        currentCount = normalized.count;
-        pfree(normalized.ranges);
-    }
-
-    // track metadata
-    state->minEffectiveIntervalCount = currentCount;
-    state->convergedToTotSize = currentSpan;
-
-    values[0] = PointerGetDatum(arr);
-    values[1] = Int64GetDatum(state->resizeTrigger);
-    values[2] = Int64GetDatum(state->sizeLimit);
-    values[3] = Int64GetDatum(state->reduceCalls);
-    values[4] = Int64GetDatum(state->maxIntervalCount);
-    values[5] = Int64GetDatum(state->totalIntervalCount);
-    values[6] = Int64GetDatum(state->combineCalls);
-    values[7] = Int64GetDatum(state->minEffectiveIntervalCount);
-    values[8] = Int64GetDatum(state->convergedToTotSize);
-
-    // get the composite tuple descriptor
-    if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-        elog(ERROR, "return type must be composite");
-    BlessTupleDesc(tupdesc);
-
-    tuple = heap_form_tuple(tupdesc, values, nulls);
-    return HeapTupleGetDatum(tuple);
 }
