@@ -523,7 +523,6 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     Int4RangeSet multSet;
     Int4RangeSet tempResult;
     Int4RangeSet normOutput;
-    // bool appendNULL = false;
 
     if (set1.count == 0)
       return empty_set();  
@@ -539,15 +538,16 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
     result.ranges = palloc(sizeof(Int4Range) * total_result_ranges);
     
     idx = 0;
+    
     // traverse thru every set/mult combination and union result
     for (i = mult.lower; i < mult.upper; i++) {
       
       // ignore mult == 0 bc it produced NULL flag
       if (i == 0) {
-        // appendNULL = true;  
         continue;
       }
 
+      // lift mult from range to set
       multSet.containsNull = false;
       multSet.count = 1;
       multSet.ranges = palloc(sizeof(Int4Range));
@@ -555,6 +555,7 @@ interval_agg_combine_set_mult(Int4RangeSet set1, Int4Range mult) {
       multSet.ranges[0].upper = i+1;      // account for exclusive UB representation 
       multSet.ranges[0].isNull = false;
 
+      // combine
       tempResult = range_set_multiply_internal(set1, multSet);
       pfree(multSet.ranges);
 

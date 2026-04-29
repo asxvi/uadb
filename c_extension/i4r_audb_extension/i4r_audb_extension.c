@@ -336,11 +336,7 @@ int logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int
 ArrayType* helperFunctions_helper( ArrayType *input, Int4RangeSet (*callback)() );
 RangeType* arithmetic_range_helper(RangeType *input1, RangeType *input2, Int4Range (*callback)(Int4Range, Int4Range));
 ArrayType* arithmetic_set_helper(ArrayType *input1, ArrayType *input2, Int4RangeSet (*callback)(Int4RangeSet, Int4RangeSet));
-
-// for min/max agg
-// can all be added to helperFunctions.h
-// Int4Range range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement);
-// Int4RangeSet set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement);
+/* for min/max agg- can all be added to helperFunctions.h */
 Int4Range range_mult_combine_helper(Int4Range range, Int4Range mult, int neutralElement);
 Int4RangeSet set_mult_combine_helper(Int4RangeSet set1, Int4Range mult, int neutralElement);
 
@@ -829,72 +825,9 @@ logical_set_helper(ArrayType *input1, ArrayType *input2, int (*callback)(Int4Ran
     return result;
 }
 
-// /////////////////////
-//  //   AGGREGATES
-// /////////////////////
-
-/*
-// Ignoring multLB=0, returns original Set x Every int in Mult. 
-// naturalElement Set does not affect min/max calculation
-
-// DEPRECATED. not used bc this did nothing but filter 0 mult
-*/
-// FIXME will need to change the type of neutral element depending on what datatype the user is using
-// Int4Range
-// range_mult_combine_helper_sum(Int4Range set1, Int4Range mult, int neutralElement)
-// {
-//     // return neutral so doesn't affect the aggregate
-//     if(mult.lower == 0) {
-//         Int4Range result;
-//         result.isNull = false;
-    
-//         // have to adjust UB + 2 or LB -2 based on if pos or neg
-//         if (neutralElement <= 0) {
-//             result.lower = 0;      //temp change to resolve crashing   
-//             result.upper = 1 ;
-//         }
-//         else {
-//             result.lower = neutralElement;      //temp change to resolve crashing   
-//             result.upper = neutralElement + 1;
-//         }
-//         return result;
-//     }
-
-//     return set1;
-// }
-
-/*
-// Returns naturalElement Set if multiplicity is 0, otherwise original Set. 
-// naturalElement Set does not affect min/max calculation
-
-// DEPRECATED. not used bc this did nothing but filter 0 mult
-*/
-// FIXME will need to change the type of neutral element depending on what datatype the user is using
-// Int4RangeSet
-// set_mult_combine_helper_sum(Int4RangeSet set1, Int4Range mult, int neutralElement)
-// {
-//     // return neutral so doesn't affect the aggregate
-//     if(mult.lower == 0) {
-//         Int4RangeSet result;
-//         result.count = 1;
-//         result.containsNull = false;
-//         result.ranges = palloc(sizeof(Int4Range));
-//         result.ranges[0].isNull = false;
-    
-//         // have to adjust UB + 2 or LB -2 based on if pos or neg
-//         if (neutralElement <= 0) {
-//             result.ranges[0].lower = 0;      //temp change to resolve crashing   
-//             result.ranges[0].upper = 1;
-//         }
-//         else {
-//             result.ranges[0].lower = neutralElement;      //temp change to resolve crashing   
-//             result.ranges[0].upper = neutralElement + 1;
-//         }
-//         return result;
-//     }
-
-//     return set1;
-// }
+/////////////////////
+ //   AGGREGATES
+/////////////////////
 
 /*
 // To be called inside a SUM aggregation call. This multiplies the Set and multiplicity together.
@@ -919,10 +852,16 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcache;
     TypeCacheEntry *typcacheMult;
     
+    // handle NULL before assign
     HANDLE_EITHER_ARG_ISNULL();
     
     input = PG_GETARG_RANGE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
+    
+    // handle empty 
+    if (RangeIsEmpty(input) || RangeIsEmpty(mult_input)) {
+        PG_RETURN_NULL();
+    }
 
     typcache = lookup_type_cache(input->rangetypid, TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
@@ -931,10 +870,10 @@ combine_range_mult_sum(PG_FUNCTION_ARGS)
     input_i4r = deserialize_RangeType(input, typcache);
     mult_i4r = deserialize_RangeType(mult_input, typcacheMult);
     
-    // check for mult LB = 0
-    if (mult_i4r.lower == 0){;
-        PG_RETURN_NULL();
-    }
+    // // check for mult LB = 0
+    // if (mult_i4r.lower == 0){;
+    //     PG_RETURN_NULL();
+    // }
 
     lifted = lift_range_local(input_i4r);
 
@@ -968,32 +907,30 @@ combine_set_mult_sum(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcacheSet;
     TypeCacheEntry *typcacheMult;
     
+    // handle NULL before assign
     HANDLE_EITHER_ARG_ISNULL();
     
     set_input = PG_GETARG_ARRAYTYPE_P(0);
     mult_input = PG_GETARG_RANGE_P(1);
 
+    // handle empty val or mult. NOT same as {empty} case lol
+    if (ArrayGetNItems(ARR_NDIM(set_input), ARR_DIMS(set_input)) == 0 || RangeIsEmpty(mult_input)) {
+        PG_RETURN_NULL();
+    }
+
     typcacheSet = lookup_type_cache(set_input->elemtype, TYPECACHE_RANGE_INFO);
     typcacheMult = lookup_type_cache(mult_input->rangetypid, TYPECACHE_RANGE_INFO);
-
-    // check for empty array
-    if (ArrayGetNItems(ARR_NDIM(set_input), ARR_DIMS(set_input)) == 0) {
-        PG_RETURN_NULL();
-    }
-    // check for empty mult
-    if RangeIsEmpty(mult_input){
-        PG_RETURN_NULL();
-    }
 
     // deserialize, operate on, serialize, return
     set1 = deserialize_ArrayType(set_input, typcacheSet);
     mult = deserialize_RangeType(mult_input, typcacheMult);
 
-    // // check for mult LB = 0
-    // if (mult.lower == 0){
-    //     pfree(set1.ranges);
-    //     PG_RETURN_NULL();
-    // }
+    // printRangeSetElog(set1);
+
+    // handle {empty} case != {} != NULL 
+    if (set1.count == 0) {
+        PG_RETURN_NULL();
+    }
 
     // output is normalized before returned
     result = interval_agg_combine_set_mult(set1, mult);

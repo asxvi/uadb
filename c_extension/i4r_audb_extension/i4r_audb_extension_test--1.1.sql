@@ -192,8 +192,10 @@ INSERT INTO t5_r_agg_data (val, mult) VALUES
     (int4range(3,5), int4range(1,2)),    -- certain (for SUM)
     ('empty'::int4range, int4range(1,2)), -- empty
     (int4range(20,30), 'empty'::int4range), -- empty mult
+    ('empty'::int4range, 'empty'::int4range), -- empty, empty
     (NULL, int4range(1,2)),              -- null
     (int4range(25,35), NULL),            -- null mult
+    (NULL, NULL),              -- null, null
     (int4range(10,20), int4range(1,5));   -- multi result
 
 INSERT INTO t5_r_aggregates VALUES
@@ -233,10 +235,13 @@ INSERT INTO t6_s_agg_data (val, mult) VALUES
     (array[int4range(1,3), int4range(6,10), int4range(20,30)], int4range(1,4)),  -- certain
     (array[int4range(2,3), int4range(9,14)], int4range(1,4)),                    -- certain
     (array[int4range(50,60), int4range(70,80)], int4range(0,2)),                 -- uncertain (ignored)
-    (array[]::int4range[], int4range(1,2)),                                      -- empty array
+    (array['empty'::int4range], int4range(1,2)),                                      -- empty array
     (array[int4range(15,25)], 'empty'::int4range),                               -- empty mult
-    (NULL, int4range(1,2)),                                                      -- null
-    (array[int4range(40,50)], NULL);                                             -- null mult
+    (array['empty'::int4range], 'empty'::int4range),                      -- empty empty
+    (NULL, int4range(1,500)),                                                      -- null
+    (array[int4range(40,50)], NULL),
+    (NULL, NULL);
+
 
 INSERT INTO t6_s_aggregates VALUES
     -- MIN tests
