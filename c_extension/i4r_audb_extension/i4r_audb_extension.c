@@ -1,3 +1,18 @@
+/*-------------------------------------------------------------------------
+ *
+ * i4r_audb_extension.c
+ *
+ * Entry point for the AUDB PostgreSQL extension. Registers all SQL-callable
+ * functions and defines shared macros used across arithmetic, logical,
+ * pruning, and aggregate operations on uncertain RangeType and ArrayType internal 
+ * data types. Extension of Original GPRoM system https://github.com/IITDBGroup/gprom
+ *
+ * 
+ * src/audb_extension.c
+ *
+ *-------------------------------------------------------------------------
+ */
+
 // source files
 #include "postgres.h"           // src
 #include "fmgr.h"               // must be included
@@ -97,7 +112,11 @@ PG_FUNCTION_INFO_V1(agg_avg_set_transfunc);
 PG_FUNCTION_INFO_V1(agg_avg_set_finalfunc);
 
 
-// easy change for future implementation. currently only affects lift funciton
+/*
+* easy change for future implementation. currently only affects lift funciton
+* can maybe remove use of PRIMARY_DATA_TYPE and instead 
+* get OID of x, and lift that to range type for that OID (if possible ofc)
+*/ 
 #define PRIMARY_DATA_TYPE "int4range"
 
 
@@ -657,6 +676,8 @@ lift_scalar(PG_FUNCTION_ARGS)
     x = PG_GETARG_INT32(0);
     result = lift_scalar_local(x);
     
+    // can maybe remove use of PRIMARY_DATA_TYPE and instead 
+    // get OID of x, and lift that to range type for that OID (if possible ofc)
     rangeTypeOID = TypenameGetTypid(PRIMARY_DATA_TYPE);
     typcache = lookup_type_cache(rangeTypeOID, TYPECACHE_RANGE_INFO);
     
@@ -1592,7 +1613,7 @@ agg_min_max_set_finalfunc(PG_FUNCTION_ARGS)
     }
     
     inputArray = PG_GETARG_ARRAYTYPE_P(0);
-    
+
     // empty set
     if (ArrayGetNItems(ARR_NDIM(inputArray), ARR_DIMS(inputArray)) == 0) {
         PG_RETURN_NULL();
@@ -1638,7 +1659,7 @@ agg_count_transfunc(PG_FUNCTION_ARGS)
 
     result = arithmetic_range_helper(state, input, range_add_internal);
 
-    PG_RETURN_ARRAYTYPE_P(result);
+    PG_RETURN_RANGE_P(result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -1733,7 +1754,13 @@ agg_avg_range_finalfunc(PG_FUNCTION_ARGS)
     PG_RETURN_RANGE_P(result);
 }
 
-
+/*
+ * State Transition function for AVG aggregate over a SET
+ * Tracks sum state and count state separately and then handles avg in finalfunc
+ *   - State: = internal = AvgAggState_range 
+ *   - Input: = RangeType val, RangeType mult
+ *   - Return: State = internal = AvgAggState_range
+ */
 Datum 
 agg_avg_set_transfunc(PG_FUNCTION_ARGS)
 {
@@ -1765,7 +1792,7 @@ agg_avg_set_transfunc(PG_FUNCTION_ARGS)
     typcacheMult = lookup_type_cache(mult->rangetypid, TYPECACHE_RANGE_INFO);
     curr = deserialize_ArrayType(data, typcacheSet);
     m = deserialize_RangeType(mult, typcacheMult);
-    combined = internal_agg_min_max_combine_set_mult(curr, m);
+    combined = internal_agg_sum_combine_set_mult(curr, m);
 
     // first call: use the first input as initial state, or non null
     if (PG_ARGISNULL(0)){    
@@ -1796,6 +1823,13 @@ agg_avg_set_transfunc(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(state);
 }
 
+/*
+ * Final Transition function for AVG aggregate over a SET.
+ * simply divides internal.sum by internal.count
+ *   - State: = internal = AvgAggState_range 
+ *   - Input: = RangeType val, RangeType mult
+ *   - Return: State = internal = AvgAggState_range
+ */
 Datum
 agg_avg_set_finalfunc(PG_FUNCTION_ARGS)
 {
