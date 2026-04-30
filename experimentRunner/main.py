@@ -20,18 +20,8 @@ from DataTypes import *
 from StatisticsPlotter import *
 
 @dataclass
-class ExperimentGroup:
-    '''Container class that stores groups of single IV experiments (Dicts of ExperimentSettings)'''
-    name: str
-    independent_variable: str
-    experiments: dict = None
-    
-    def __post_init__(self):
-        if self.experiments is None:
-            self.experiments = {}
-
-@dataclass
 class ExperimentSuite:
+    """ contains many related groups of experiments (ExperimentGroups) """
     name: str
     groups: dict[str, ExperimentGroup] = None
 
@@ -45,23 +35,25 @@ class ExperimentSuite:
         self.groups[group.name] = group
 
 @dataclass
+class ExperimentGroup:
+    """ container class that stores groups of single IV experiments (dict of ExperimentSettings + metadata) """
+    name: str
+    independent_variable: str
+    experiments: dict = None
+    
+    def __post_init__(self):
+        if self.experiments is None:
+            self.experiments = {}
+
+@dataclass
 class ExperimentSettings:
-    '''
+    """
         Class contains the modifiable settings of a test
         if num_intervals is used, num_intervals_range shouldn't be used (left default=NULL)
         if gap_size is used, gap_size_range shouldn't be used (left default=NULL)
+          ...
+    """
 
-        - name:                   required. consider pairing with format_name(self) after setting attiributes
-        - data_type:              always Set or Range
-        - curr_trial:             internal
-        - experiment_id:          unique string name that identifies specific experiment
-        - dataset_size:           modifiable. number of rows to produce
-        - uncertain_ratio:        modifiable. uncertainty in data
-        - interval_size_range:     
-
-        WIP
-
-    '''
     name: str                                   # required 
     data_type: DataType                         # always Set or Range
     distribution_config: DistributionConfig = field(default_factory=DistributionConfig)     # distribution type
@@ -112,10 +104,11 @@ class ExperimentSettings:
 
         dt = 'range' if self.data_type == DataType.RANGE else 'set'
         return {
+            # have to ignore these i forget why? i think reprod errors bc they depend on key which is run dependent
             # 'name': self.name,
-            'data_type': dt,
             # 'curr_trial': self.curr_trial,
             # 'experiment_id': self.experiment_id,
+            'data_type': dt,
             'num_trials': self.num_trials,
             'dataset_size': self.dataset_size,
             'uncertain_ratio': self.uncertain_ratio,
@@ -134,9 +127,10 @@ class ExperimentSettings:
         }
     
 class ExperimentRunner:
-    '''
-        ExperimentRunner runs entire or parts of a test (gen_data, insert_db)
-    '''
+    """
+        ExperimentRunner runs entire parts, or specific parts of a test (gen_data, insert_db).
+        assuming proper data type and format, user can: run_experiment()
+    """
 
     NORMALIZE = True
     
@@ -162,6 +156,10 @@ class ExperimentRunner:
         self.name = None                    # internal id
         self.groupName = None               # bucket experiments together
         self.csv_paths = []                 # store all df results of every exp for mass analysis
+
+    def full_run(self, experiment: ExperimentSettings) -> list:
+        """ generate data, insert to DB, run experiments and save results to rv """
+        # TODO
 
     def run_experiment(self, experiment: ExperimentSettings) -> list:
         ''' creates or reuses generated data. runs experiment for each trial '''
@@ -368,27 +366,41 @@ class ExperimentRunner:
                     print(f"    Error cleaning tables: {e}")
         print(f"\nDropped {dropped} tables\n")
 
-    def set_file_path(self, suite_name: str, group_name: str, experiment_name:str) -> None:
-        """creates experiment folder path based on group and experiment name.
-        if experiment_name is None, creates a folder for the entire group.
+    # def set_file_path(self, suite_name: str, group_name: str, experiment_name:str) -> None:
+    #     """creates experiment folder path based on group and experiment name.
+    #     if experiment_name is None, creates a folder for the entire group.
 
-        Format:
-        - with experiment: ./data/results/<group>/<experiment_name>_sd<seed>
-        - group-only:    ./data/results/<group>/sd<seed>"""
+    #     Format:
+    #     - with experiment: ./data/results/<group>/<experiment_name>_sd<seed>
+    #     - group-only:    ./data/results/<group>/sd<seed>"""
         
-        if experiment_name:
-            # folder_name = f"{experiment_name}_sd{self.master_seed}"
-            folder_name = f"{experiment_name}"
-        else:
-            folder_name = ""
+    #     folder_name = f"{experiment_name}" if experiment_name else ""
 
+    #     if group_name and suite_name:
+    #         self.resultFilepath = os.path.join("data", "results", str(self.master_seed), suite_name, group_name, folder_name)
+    #     else:
+    #         self.resultFilepath = os.path.join("data", "results", str(self.master_seed), folder_name)
+
+    #     os.makedirs(self.resultFilepath, exist_ok=True)
+    
+    def set_file_path(self, suite_name: str, group_name: str, experiment_name:str) -> None:
+        """
+            creates experiment folder path based on group and experiment name.
+            if experiment_name is None, creates a folder for the entire group.
+
+            Format:
+            - with experiment: ./data/results/<group>/<experiment_name>_sd<seed>
+            - group-only:    ./data/results/<group>/sd<seed>
+        """
+        
+        folder_name = f"{experiment_name}" if experiment_name else ""
         if group_name and suite_name:
-            self.resultFilepath = os.path.join("data", "results", str(self.master_seed), suite_name, group_name, folder_name)
+            self.resultFilepath = os.path.join("data", "results", str(self.master_seed)+f"_{suite_name}", group_name, folder_name)
         else:
             self.resultFilepath = os.path.join("data", "results", str(self.master_seed), folder_name)
 
         os.makedirs(self.resultFilepath, exist_ok=True)
-    
+
     # ----------------------------------  
     # --- Internal Helpers (Private) ---
     # ----------------------------------    
@@ -530,7 +542,7 @@ class ExperimentRunner:
                 conn.commit()
     
     ####### PRUNE #######
-    def build_transform(table, transform_func=None, prune_alpha=None):
+    def build_transform(self, table, transform_func=None, prune_alpha=None):
         """
         Returns SQL subquery for FROM clause
         """
@@ -895,26 +907,26 @@ class ExperimentRunner:
         return aggregated
 
     def __connect_db(self):
+        """ return psycopg connection object """
         return psycopg2.connect(**self.db_config)
     
-    def __generate_name(self, experiment: ExperimentSettings, generalName: bool = False) -> str:
-        '''
+    def __generate_name(self, experiment: ExperimentSettings, trialName: bool = False) -> str:
+        """
             generates postgres safe name (< 63 chars). old name was being cut.
-            if generalName param is set, then trial number will be emit from result
+                format:     t_{dtype}_{iv_abbrev}_{10 char hash of experimentDict}
 
-                format:     t_{dtype}_{iv_abbrev}_{10 char dictHashOfExperiment}_t{trialNum}
-        '''
+            if trialName param is set, then trial number will appended to result
+        """
         dtype = 'r' if experiment.data_type == DataType.RANGE else 's'
         iv_abbrev = experiment.iv_map.get(experiment.independent_variable if experiment.independent_variable else 'iv')
         param_str = json.dumps(experiment.to_dict(), sort_keys=True, default=str)
         
         hashed = hashlib.sha1(param_str.encode()).hexdigest()[:10]
     
-        if generalName:
-            return f"t_{dtype}_iv_{iv_abbrev}_{hashed}"
+        if trialName:
+            return f"t_{dtype}_iv_{iv_abbrev}_{hashed}_t{experiment.curr_trial}"
         
         return f"t_{dtype}_iv_{iv_abbrev}_{hashed}"
-        # return f"t_{dtype}_iv_{iv_abbrev}_{hashed}_t{experiment.curr_trial}"
         
     def __save_ddl_file(self, experiment: ExperimentSettings, data):
         ''' write data to DDL file for later loading 
@@ -1007,8 +1019,8 @@ def make_log_sweep(n_min, n_max, points):
 
 def run_all():
     '''
-        Main entrypoint to running experiments. 
-        Parses args, starts runner engine, runs experiments, and processes results
+        main entrypoint to running experiments. 
+        - parses args, starts runner engine, runs experiments, and plots results
     '''
 
     ### Parse args and config
@@ -1025,17 +1037,17 @@ def run_all():
     ### Start engine
     runner = ExperimentRunner(db_config, master_seed)
 
-    ### Clean before
+    ### Clean existing tables
     if args.clean_before:
         runner.clean_tables(args.clean_before)
 
-    ### Load Experiments
+    ### Load Experiments into dict(Suite_name: ExperimentSuite)
     experiments = _load_experiments(args, runner, db_config)
-    
-    ### Run every experiment Suite and save results
-    for suite in experiments.values():
 
+    ### Run and save independent results for each ExperimentSuite
+    for suite in experiments.values():
         suite_results = []
+
         for group in suite.groups.values():
             results = _run_experiment_group(runner, suite.name, group)
             print(f'    Group results saved in: {runner.resultFilepath}')  
@@ -1046,13 +1058,13 @@ def run_all():
         # plot aggregate results for suite
         # _plot_experiment_suite(runner, suite_results)
 
-    ### Clean after
+    ### Clean tables before exit
     if args.clean_after:
         runner.clean_tables(args.clean_after)
 
     print("\nUnique Master seed: ", master_seed)
 
-def _load_experiments(args, runner, db_config):
+def _load_experiments(args, runner, db_config) -> dict:
     '''Load experiment configuration from various sources. (CLI, YAML, Python Script)'''
 
     if args.quick:
@@ -1060,7 +1072,7 @@ def _load_experiments(args, runner, db_config):
     elif args.yaml_experiments_file:
         return load_experiments_from_file(args.yaml_experiments_file)
     elif args.code:
-        namespace = {'runner': runner, 'db_config': db_config}
+        namespace = {'runner': runner, 'db_config': db_config}      # persist memory
         exec(open(args.code).read(), namespace)     # CS361 lol
         return namespace.get('experiments', {})
     else:
@@ -1071,9 +1083,8 @@ def _run_experiment_group(runner: ExperimentRunner, suite_name: str, group: Expe
 
     print(f"\nRunning experiment group: [{suite_name}]- {group.name}")
     
-    # reset runner metadata to current experiment group
+    # reset runner metadata to current experiment group. results are saved at group level
     runner.results = []
-    
     runner.name = suite_name
     runner.groupName = group.name
     runner.set_file_path(suite_name, group.name, None)
@@ -1102,8 +1113,6 @@ def _plot_experiment_suite(runner: ExperimentRunner, csv_paths: list) -> None:
 
     plotter = StatisticsPlotter(runner.resultFilepath, runner.master_seed)
     plotter.plot_experiment_suite(csv_paths)
-
-
 
 
 if __name__ == '__main__':

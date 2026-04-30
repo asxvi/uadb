@@ -55,12 +55,12 @@ def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
     if suite_name not in experiments:
         experiments[suite_name] = ExperimentSuite(suite_name)
     
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 250))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 100))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 500, 10))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 150, 100))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 150, 10))
-    experiments[suite_name].add(ni_sweep(ni_list, n, 70, 50))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 500, 250))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 500, 100))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 500, 10))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 150, 100))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 150, 10))
+    # experiments[suite_name].add(ni_sweep(ni_list, n, 70, 50))
     experiments[suite_name].add(ni_sweep(ni_list, n, 15, 10))
     experiments[suite_name].add(ni_sweep(ni_list, n, 3, 1))
 
@@ -69,7 +69,7 @@ def plot_ni_gap_sweep(ni_list: int, n: int, suite_name: str = None):
 ni_list = make_log_sweep(1, 15, 8)
 
 plot_ni_gap_sweep(ni_list, 100)
-# plot_ni_gap_sweep(ni_list, 200)
+plot_ni_gap_sweep(ni_list, 200)
 # plot_ni_gap_sweep(ni_list, 400)
 
 
