@@ -9,6 +9,7 @@
 // #define min2(a, b) (((a) < (b)) ? (a) : (b))
 // #define max2(a, b) (((a) > (b)) ? (a) : (b))
 
+// empty_set is length 0 with no flags set, and no range(NULL). must be handeled by caller
 Int4RangeSet empty_set() {
   Int4RangeSet r;
   r.count = 0;
@@ -17,11 +18,12 @@ Int4RangeSet empty_set() {
   return r;
 }
 
+// null_set is length 1 with only null flag set, and 1 range (0,0). must be handled by caller
 Int4RangeSet null_set() {
   Int4RangeSet r;
   r.count = 1;
   r.containsNull = true;
-  r.ranges = malloc(sizeof(Int4Range));
+  r.ranges = palloc(sizeof(Int4Range));
   r.ranges[0].isNull = true;
   r.ranges[0].lower = 0;
   r.ranges[0].upper = 0;
@@ -105,7 +107,7 @@ Int4RangeSet deep_copy(Int4RangeSet src) {
         r.ranges = NULL;
         return r;
     }
-    r.ranges = malloc(sizeof(Int4Range) * src.count);
+    r.ranges = palloc(sizeof(Int4Range) * src.count);
     memcpy(r.ranges, src.ranges, sizeof(Int4Range) * src.count);
     return r;
 }
@@ -138,7 +140,7 @@ Int4RangeSet lift_range_local(Int4Range a){
   Int4RangeSet rv;
   rv.count = 1;
   rv.containsNull = a.isNull;
-  rv.ranges = (Int4Range *) malloc(sizeof(Int4Range));
+  rv.ranges = (Int4Range *) palloc(sizeof(Int4Range));
   rv.ranges[0] = a;
 
   return rv;
@@ -180,10 +182,22 @@ Int4RangeSet min_rangeSet(Int4RangeSet a, Int4RangeSet b){
   if (b.count == 0) return a;
   
   
-  rv.ranges = malloc(sizeof(Int4Range) * (a.count + b.count));
+  rv.ranges = palloc(sizeof(Int4Range) * (a.count + b.count));
   rv.containsNull = false;
   rv.count = 0;
   
+  // // baseline- cross product
+  // for (i = 0; i < a.count; i++) {
+  //   for (j = 0; j < b.count; j++) {
+  //     Int4Range newRange;
+  //     newRange.isNull = false;
+  //     newRange.lower  = min2(a.ranges[i].lower, b.ranges[j].lower);
+  //     newRange.upper  = min2(a.ranges[i].upper, b.ranges[j].upper);
+  //     rv.ranges[rv.count++] = newRange;
+  //   }
+  // }
+
+  // optimized merge join-type algorithm
   aptr = 0;
   bptr = 0;
   while (aptr < a.count && bptr < b.count) {
@@ -219,10 +233,21 @@ Int4RangeSet max_rangeSet(Int4RangeSet a, Int4RangeSet b){
   if (a.count == 0) return b;
   if (b.count == 0) return a;
   
-  rv.ranges = malloc(sizeof(Int4Range) * (a.count + b.count));
+  rv.ranges = palloc(sizeof(Int4Range) * (a.count + b.count));
   rv.containsNull = false;
   rv.count = 0;
   
+  // // baseline- cross product
+  // for (i = 0; i < a.count; i++) {
+  //   for (j = 0; j < b.count; j++) {
+  //     Int4Range newRange;
+  //     newRange.isNull = false;
+  //     newRange.lower  = max2(a.ranges[i].lower, b.ranges[j].lower);
+  //     newRange.upper  = max2(a.ranges[i].upper, b.ranges[j].upper);
+  //     rv.ranges[rv.count++] = newRange;
+  //   }
+  // }
+
   aptr = 0;
   bptr = 0;
   while (aptr < a.count && bptr < b.count) {
@@ -278,7 +303,7 @@ Int4RangeSet sort(Int4RangeSet vals){
   }
 
   sorted.count = nonNullCount + (vals.containsNull ? 1 : 0);
-  sorted.ranges = malloc(sizeof(Int4Range) * sorted.count);
+  sorted.ranges = palloc(sizeof(Int4Range) * sorted.count);
   sorted.containsNull = vals.containsNull;
 
   idx = 0;
@@ -327,9 +352,9 @@ Int4RangeSet normalize(Int4RangeSet vals){
     sorted = filterOutNulls(sorted);
   }
 
-  // otherwise malloc largest size
+  // otherwise palloc largest size
   normalized.count = 0;
-  normalized.ranges = malloc(sizeof(Int4Range) * sorted.count);
+  normalized.ranges = palloc(sizeof(Int4Range) * sorted.count);
   normalized.containsNull = false;
   
   prev = sorted.ranges[0];
@@ -364,7 +389,7 @@ Int4RangeSet normalize(Int4RangeSet vals){
     normalized.count++;
   }
 
-  free(sorted.ranges);
+  pfree(sorted.ranges);
   return normalized;
 }
 
@@ -477,7 +502,7 @@ Int4RangeSet reduceSize(Int4RangeSet vals, int numRangesKeep){
   return sortedInput;
 }
 
-// removes any NULLs in the set. returns a malloc'd set with containsNULL = false.
+// removes any NULLs in the set. returns a palloc'd set with containsNULL = false.
 // set no longer knows it contains nulls; this must be tracked and known with caller when called.
 Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   Int4RangeSet filteredVals;
@@ -495,7 +520,7 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
   }
 
   filteredVals.count = nonNullCount;
-  filteredVals.ranges = malloc(sizeof(Int4Range) * filteredVals.count);
+  filteredVals.ranges = palloc(sizeof(Int4Range) * filteredVals.count);
   filteredVals.containsNull = false;
   // filteredVals.containsNull = vals.containsNull;
 
@@ -507,7 +532,7 @@ Int4RangeSet filterOutNulls(Int4RangeSet vals) {
     }
   }
 
-  free(vals.ranges);
+  pfree(vals.ranges);
 
   return filteredVals;
 }

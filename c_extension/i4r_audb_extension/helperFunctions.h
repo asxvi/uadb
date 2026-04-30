@@ -71,15 +71,19 @@ typedef struct {
 
 } SumAggStateMetrics;
 
+// contains sum and count and elem OID
 typedef struct {
     Int4Range sum;
     Int4Range count;
-} rAvgAggState;
+    Oid elemTypeOID;
+} AvgAggState_range;
 
+// contains sum and count and elem OID
 typedef struct {
     Int4RangeSet sum;
     Int4Range count;
-} sAvgAggState;
+    Oid elemTypeOID;
+} AvgAggState_set;
 
 // used for findign neutral element based on operation we are doing
 typedef enum {

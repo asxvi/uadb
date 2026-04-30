@@ -347,7 +347,7 @@ LANGUAGE c;
 
 create aggregate avg (data int4range, mult int4range)
 (
-    stype = internal,   -- rAvgAggState
+    stype = internal,   -- AvgAggState_range
     sfunc = agg_avg_range_transfunc,
     finalfunc = agg_avg_range_finalfunc
 );

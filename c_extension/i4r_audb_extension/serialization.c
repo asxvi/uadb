@@ -105,6 +105,7 @@ deserialize_ArrayType(ArrayType *arr, TypeCacheEntry *typcache)
     deconstruct_array(arr, rangeTypeOID, typlen, typbyval, typalign, &elems, &nulls, &count);
 
     // create an empty I4RSet if Array is empty
+    // FIXME error here on return
     if (count < 1) {
         set.count = 1;
         set.containsNull = true;
